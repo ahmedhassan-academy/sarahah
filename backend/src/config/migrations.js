@@ -1,6 +1,6 @@
 const pool = require('./db');
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 async function ensureSchemaVersionTable() {
   await pool.query(`
@@ -62,6 +62,31 @@ async function applyAll() {
     CREATE INDEX IF NOT EXISTS idx_users_username_lower
       ON users (LOWER(username))
   `);
+
+  // v2 — admin + ban + hide
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN NOT NULL DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN NOT NULL DEFAULT FALSE`);
+}
+
+async function bootstrapAdmins() {
+  const raw = (process.env.BOOTSTRAP_ADMIN_USERNAMES || '').trim();
+  if (!raw) return;
+  const names = raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  if (!names.length) return;
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE users SET is_admin = TRUE
+       WHERE LOWER(username) = ANY($1::text[]) AND is_admin = FALSE`,
+      [names]
+    );
+    if (rowCount > 0) {
+      console.log(`[admin] promoted ${rowCount} user(s) to admin via BOOTSTRAP_ADMIN_USERNAMES`);
+    }
+  } catch (err) {
+    console.error('[admin] bootstrap failed', err);
+  }
 }
 
 async function runMigrations() {
@@ -70,13 +95,14 @@ async function runMigrations() {
 
   if (current === SCHEMA_VERSION) {
     console.log(`[migrations] schema is up to date (v${current})`);
-    return;
+  } else {
+    console.log(`[migrations] applying schema → v${SCHEMA_VERSION} (was v${current})`);
+    await applyAll();
+    await setVersion(SCHEMA_VERSION);
+    console.log(`[migrations] done`);
   }
 
-  console.log(`[migrations] applying schema → v${SCHEMA_VERSION} (was v${current})`);
-  await applyAll();
-  await setVersion(SCHEMA_VERSION);
-  console.log(`[migrations] done`);
+  await bootstrapAdmins();
 }
 
 module.exports = { runMigrations, SCHEMA_VERSION };

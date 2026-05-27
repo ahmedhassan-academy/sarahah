@@ -7,6 +7,7 @@ const { runMigrations } = require('./config/migrations');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const messageRoutes = require('./routes/messages');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error('[unhandled]', err);

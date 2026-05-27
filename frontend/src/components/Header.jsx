@@ -35,6 +35,11 @@ export default function Header() {
               <NavLink to="/inbox" className={link}>
                 {t('nav.inbox')}
               </NavLink>
+              {user.is_admin && (
+                <NavLink to="/admin" className={link}>
+                  {t('nav.admin')}
+                </NavLink>
+              )}
               <NavLink to="/settings" className={link}>
                 {t('nav.settings')}
               </NavLink>

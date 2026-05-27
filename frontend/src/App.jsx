@@ -2,12 +2,14 @@ import { useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
+import AdminRoute from './components/AdminRoute';
 import Landing from './pages/Landing';
 import Register from './pages/Register';
 import Login from './pages/Login';
 import PublicProfile from './pages/PublicProfile';
 import Inbox from './pages/Inbox';
 import Settings from './pages/Settings';
+import Admin from './pages/Admin';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
 import Help from './pages/Help';
@@ -41,6 +43,14 @@ export default function App() {
             <ProtectedRoute>
               <Settings />
             </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <AdminRoute>
+              <Admin />
+            </AdminRoute>
           }
         />
         <Route path="/:username" element={<PublicProfile />} />

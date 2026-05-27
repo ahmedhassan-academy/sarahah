@@ -31,7 +31,7 @@ async function register(req, res) {
     const { rows } = await pool.query(
       `INSERT INTO users (username, email, password_hash, display_name)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, username, email, display_name, bio, avatar_url, allow_messages, created_at`,
+       RETURNING id, username, email, display_name, bio, avatar_url, allow_messages, is_admin, is_banned, created_at`,
       [username, email, hash, display_name]
     );
     const user = rows[0];
@@ -57,7 +57,7 @@ async function login(req, res) {
 
   try {
     const { rows } = await pool.query(
-      `SELECT id, username, email, password_hash, display_name, bio, avatar_url, allow_messages, created_at
+      `SELECT id, username, email, password_hash, display_name, bio, avatar_url, allow_messages, is_admin, is_banned, created_at
        FROM users
        WHERE LOWER(email) = $1 OR LOWER(username) = $1
        LIMIT 1`,
@@ -68,6 +68,8 @@ async function login(req, res) {
 
     const ok = await bcrypt.compare(password, user.password_hash);
     if (!ok) return res.status(401).json({ error: 'invalid_credentials' });
+
+    if (user.is_banned) return res.status(403).json({ error: 'account_banned' });
 
     delete user.password_hash;
     const token = sign({ uid: user.id });
@@ -81,7 +83,7 @@ async function login(req, res) {
 async function me(req, res) {
   try {
     const { rows } = await pool.query(
-      `SELECT id, username, email, display_name, bio, avatar_url, allow_messages, created_at
+      `SELECT id, username, email, display_name, bio, avatar_url, allow_messages, is_admin, is_banned, created_at
        FROM users WHERE id = $1`,
       [req.userId]
     );

@@ -7,12 +7,13 @@ async function getPublicProfile(req, res) {
 
   try {
     const { rows } = await pool.query(
-      `SELECT id, username, display_name, bio, avatar_url, allow_messages, created_at
+      `SELECT id, username, display_name, bio, avatar_url, allow_messages, is_banned, created_at
        FROM users WHERE LOWER(username) = LOWER($1)`,
       [username]
     );
     const user = rows[0];
-    if (!user) return res.status(404).json({ error: 'user_not_found' });
+    if (!user || user.is_banned) return res.status(404).json({ error: 'user_not_found' });
+    delete user.is_banned;
     res.json({ user });
   } catch (err) {
     console.error('[users/public]', err);

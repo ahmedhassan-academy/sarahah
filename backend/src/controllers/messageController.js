@@ -10,12 +10,15 @@ async function sendMessage(req, res) {
   if (body.length > MAX_BODY) return res.status(400).json({ error: 'too_long' });
 
   try {
+    const senderCheck = await pool.query(`SELECT is_banned FROM users WHERE id = $1`, [req.userId]);
+    if (senderCheck.rows[0]?.is_banned) return res.status(403).json({ error: 'account_banned' });
+
     const { rows: r } = await pool.query(
-      `SELECT id, allow_messages FROM users WHERE LOWER(username) = LOWER($1)`,
+      `SELECT id, allow_messages, is_banned FROM users WHERE LOWER(username) = LOWER($1)`,
       [username]
     );
     const recipient = r[0];
-    if (!recipient) return res.status(404).json({ error: 'user_not_found' });
+    if (!recipient || recipient.is_banned) return res.status(404).json({ error: 'user_not_found' });
     if (!recipient.allow_messages) return res.status(403).json({ error: 'messages_disabled' });
     if (recipient.id === req.userId) return res.status(400).json({ error: 'cannot_message_self' });
 
@@ -36,7 +39,7 @@ async function listInbox(req, res) {
   try {
     const filter = String(req.query.filter || 'all');
     const params = [req.userId];
-    let where = `recipient_id = $1`;
+    let where = `recipient_id = $1 AND is_hidden = FALSE`;
     if (filter === 'unread') where += ` AND is_read = FALSE`;
     if (filter === 'favorite') where += ` AND is_favorite = TRUE`;
 
@@ -54,7 +57,7 @@ async function listInbox(req, res) {
          COUNT(*)::int AS total,
          COUNT(*) FILTER (WHERE is_read = FALSE)::int AS unread,
          COUNT(*) FILTER (WHERE is_favorite = TRUE)::int AS favorite
-       FROM messages WHERE recipient_id = $1`,
+       FROM messages WHERE recipient_id = $1 AND is_hidden = FALSE`,
       [req.userId]
     );
 
