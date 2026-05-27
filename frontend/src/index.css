@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Cairo', 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-[#F6F6F6] text-ink;
+  }
+  [dir='rtl'] body {
+    font-family: 'Cairo', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 font-semibold transition-colors select-none;
+  }
+  .btn-primary {
+    @apply btn bg-brand-500 text-white hover:bg-brand-600 active:bg-brand-700 shadow-soft;
+  }
+  .btn-ghost {
+    @apply btn text-ink hover:bg-slate-100;
+  }
+  .btn-outline {
+    @apply btn border border-slate-300 text-ink hover:bg-slate-100;
+  }
+  .input {
+    @apply w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5 outline-none focus:border-brand-500 focus:ring-4 focus:ring-brand-100 transition;
+  }
+  .card {
+    @apply rounded-2xl bg-white shadow-sm border border-slate-200;
+  }
+  .floating-field {
+    @apply relative;
+  }
+  .floating-field > input,
+  .floating-field > textarea {
+    @apply input pt-5 pb-2 placeholder-transparent;
+  }
+  .floating-field > label {
+    @apply absolute top-3 start-4 text-ink-muted text-sm pointer-events-none transition-all bg-white px-1;
+  }
+  .floating-field > input:focus + label,
+  .floating-field > input:not(:placeholder-shown) + label,
+  .floating-field > textarea:focus + label,
+  .floating-field > textarea:not(:placeholder-shown) + label {
+    @apply -top-2 text-xs text-brand-600;
+  }
+  .brand-mark {
+    @apply w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-brand-400 to-brand-700 grid place-items-center text-white text-2xl font-extrabold shadow-soft;
+  }
+}
