@@ -442,7 +442,7 @@ function applyDir(lng) {
   const dir = lng === 'ar' ? 'rtl' : 'ltr';
   document.documentElement.lang = lng;
   document.documentElement.dir = dir;
-  document.title = lng === 'ar' ? 'صراحة' : 'Sarahah';
+  document.title = lng === 'ar' ? 'صراحة الرسائل' : 'Sarahah';
 }
 
 applyDir(initial);
