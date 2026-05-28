@@ -1,22 +1,29 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import { useAuth } from '../store/auth';
 import MessageCard from '../components/MessageCard';
+import ShareSheet from '../components/ShareSheet';
+
+const TABS = ['inbox', 'sent', 'favorites', 'public'];
 
 export default function Inbox() {
   const { t } = useTranslation();
   const user = useAuth((s) => s.user);
-  const [filter, setFilter] = useState('all');
+  const [tab, setTab] = useState('inbox');
   const [messages, setMessages] = useState([]);
   const [counts, setCounts] = useState({ total: 0, unread: 0, favorite: 0 });
   const [loading, setLoading] = useState(true);
+  const [sortNewestFirst, setSortNewestFirst] = useState(true);
+  const [shareOpen, setShareOpen] = useState(false);
 
-  const load = async (f = filter) => {
+  const filterParam = tab === 'favorites' ? 'favorite' : 'all';
+
+  const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/messages', { params: { filter: f } });
+      const { data } = await api.get('/messages', { params: { filter: filterParam } });
       setMessages(data.messages);
       setCounts(data.counts);
     } finally {
@@ -25,9 +32,20 @@ export default function Inbox() {
   };
 
   useEffect(() => {
-    load(filter);
+    if (tab === 'inbox' || tab === 'favorites') load();
+    else setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter]);
+  }, [tab]);
+
+  const sortedMessages = useMemo(() => {
+    const arr = [...messages];
+    arr.sort((a, b) => {
+      const ta = new Date(a.created_at).getTime();
+      const tb = new Date(b.created_at).getTime();
+      return sortNewestFirst ? tb - ta : ta - tb;
+    });
+    return arr;
+  }, [messages, sortNewestFirst]);
 
   const onFavorite = async (id) => {
     try {
@@ -65,65 +83,128 @@ export default function Inbox() {
   };
 
   const link = `${window.location.origin}/${user?.username || ''}`;
-  const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(link);
-      toast.success(t('inbox.copied'));
-    } catch {
-      const el = document.createElement('input');
-      el.value = link;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand('copy');
-      el.remove();
-      toast.success(t('inbox.copied'));
-    }
-  };
+  const displayName = user?.display_name || user?.username || '';
+  const avatar = user?.avatar_url;
 
-  const tab = (key, label, count) => (
-    <button
-      key={key}
-      onClick={() => setFilter(key)}
-      className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
-        filter === key ? 'bg-brand-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-      }`}
-    >
-      {label}
-      {count !== undefined && (
-        <span className={`ms-2 rounded-full px-2 py-0.5 text-xs ${
-          filter === key ? 'bg-brand-700 text-white' : 'bg-slate-100 text-slate-600'
-        }`}>{count}</span>
-      )}
-    </button>
-  );
+  const stats = [
+    { key: 'statFollowing', value: 0 },
+    { key: 'statFollowers', value: 0 },
+    { key: 'statPosts', value: 0 },
+    { key: 'statMessages', value: counts.total },
+  ];
+
+  const sectionTitle = {
+    inbox: t('inbox.sectionInbox'),
+    sent: t('inbox.sectionSent'),
+    favorites: t('inbox.sectionFavorites'),
+    public: t('inbox.sectionPublic'),
+  }[tab];
+
+  const isReadOnlyTab = tab === 'sent' || tab === 'public';
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <h1 className="text-2xl font-extrabold text-slate-900">{t('inbox.title')}</h1>
+    <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8">
+      <div className="card overflow-hidden">
+        <div className="h-1.5 bg-gradient-to-r from-brand-400 to-brand-600" />
+        <div className="px-5 sm:px-8 pt-7 pb-5 text-center">
+          <div className="mx-auto w-28 h-28 sm:w-32 sm:h-32 rounded-full overflow-hidden ring-4 ring-white shadow-md bg-gradient-to-br from-brand-400 to-brand-700 grid place-items-center text-white text-4xl font-extrabold">
+            {avatar ? (
+              <img src={avatar} alt={displayName} className="w-full h-full object-cover" />
+            ) : (
+              <span>{displayName.charAt(0).toUpperCase()}</span>
+            )}
+          </div>
+          <h1 className="mt-4 text-2xl font-extrabold text-ink">{displayName}</h1>
+          <button
+            onClick={() => setShareOpen(true)}
+            className="mt-1 text-sm text-brand-700 hover:underline break-all"
+            dir="ltr"
+          >
+            {link}
+          </button>
 
-      <div className="mt-5 card p-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-        <div className="text-sm text-slate-600 truncate">
-          <span className="font-semibold">{t('inbox.yourLink')}</span>{' '}
-          <span className="text-brand-700 break-all">{link}</span>
+          <div className="mt-5 grid grid-cols-4 gap-2 sm:gap-4">
+            {stats.map((s) => (
+              <div key={s.key} className="text-center">
+                <div className="text-xs sm:text-sm text-ink-muted">{t(`inbox.${s.key}`)}</div>
+                <div className="mt-1 text-lg sm:text-xl font-extrabold text-ink">{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-6 grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => (window.location.href = '/help')}
+              className="col-span-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-accent-yellow text-amber-900 font-semibold py-2.5 text-sm hover:brightness-95 transition"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.5 9a2.5 2.5 0 1 1 4.4 1.6c-.7.8-1.4 1.2-1.4 2.4M12 17h.01" />
+              </svg>
+              {t('inbox.help')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShareOpen(true)}
+              className="col-span-2 inline-flex items-center justify-center gap-2 rounded-xl bg-sky-100 text-sky-800 font-semibold py-2.5 text-sm hover:bg-sky-200 transition"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="18" cy="5" r="3" />
+                <circle cx="6" cy="12" r="3" />
+                <circle cx="18" cy="19" r="3" />
+                <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+              </svg>
+              {t('inbox.share')}
+            </button>
+          </div>
         </div>
-        <button onClick={copyLink} className="btn-primary text-sm whitespace-nowrap">
-          {t('inbox.shareLink')}
+
+        <div className="px-2 sm:px-4 border-t border-slate-100">
+          <div className="grid grid-cols-4 gap-1 p-1">
+            {TABS.map((k) => (
+              <button
+                key={k}
+                onClick={() => setTab(k)}
+                className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                  tab === k
+                    ? 'bg-brand-500 text-white shadow-soft'
+                    : 'text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {t(`inbox.tab${k.charAt(0).toUpperCase() + k.slice(1)}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 flex items-center justify-between">
+        <h2 className="text-base font-bold text-slate-700">{sectionTitle}</h2>
+        <button
+          onClick={() => setSortNewestFirst((v) => !v)}
+          className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"
+          aria-label={sortNewestFirst ? t('inbox.sortNewest') : t('inbox.sortOldest')}
+          title={sortNewestFirst ? t('inbox.sortNewest') : t('inbox.sortOldest')}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 6h18M6 12h12M10 18h4" />
+          </svg>
         </button>
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-2">
-        {tab('all', t('inbox.filterAll'), counts.total)}
-        {tab('unread', t('inbox.filterUnread'), counts.unread)}
-        {tab('favorite', t('inbox.filterFavorite'), counts.favorite)}
-      </div>
-
-      <div className="mt-5 space-y-3">
-        {loading ? (
+      <div className="mt-3 space-y-3">
+        {isReadOnlyTab ? (
+          <div className="card p-10 text-center text-slate-500">
+            <div className="text-3xl mb-2">🚧</div>
+            {t('inbox.comingSoon')}
+          </div>
+        ) : loading ? (
           <div className="text-center text-slate-500 py-12">{t('common.loading')}</div>
-        ) : messages.length === 0 ? (
+        ) : sortedMessages.length === 0 ? (
           <div className="card p-10 text-center text-slate-500">{t('inbox.empty')}</div>
         ) : (
-          messages.map((m) => (
+          sortedMessages.map((m) => (
             <MessageCard
               key={m.id}
               message={m}
@@ -134,6 +215,8 @@ export default function Inbox() {
           ))
         )}
       </div>
+
+      <ShareSheet open={shareOpen} onClose={() => setShareOpen(false)} link={link} />
     </div>
   );
 }
