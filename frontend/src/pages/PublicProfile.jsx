@@ -100,15 +100,6 @@ export default function PublicProfile() {
             <Link to="/inbox" className="btn-primary">{t('nav.inbox')}</Link>
           </div>
         </div>
-      ) : !user ? (
-        <div className="card mt-5 p-6 text-center">
-          <p className="text-slate-600 text-sm mb-4">
-            {t('profile.sendMessageTo')} <span className="font-bold" dir="ltr">@{profile.username}</span>
-          </p>
-          <Link to="/login" state={{ from: `/${profile.username}` }} className="btn-primary">
-            {t('nav.login')}
-          </Link>
-        </div>
       ) : (
         <form onSubmit={send} className="card mt-5 p-6">
           <label className="block text-sm font-semibold text-slate-700 mb-2">

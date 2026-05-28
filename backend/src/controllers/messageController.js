@@ -10,8 +10,10 @@ async function sendMessage(req, res) {
   if (body.length > MAX_BODY) return res.status(400).json({ error: 'too_long' });
 
   try {
-    const senderCheck = await pool.query(`SELECT is_banned FROM users WHERE id = $1`, [req.userId]);
-    if (senderCheck.rows[0]?.is_banned) return res.status(403).json({ error: 'account_banned' });
+    if (req.userId) {
+      const senderCheck = await pool.query(`SELECT is_banned FROM users WHERE id = $1`, [req.userId]);
+      if (senderCheck.rows[0]?.is_banned) return res.status(403).json({ error: 'account_banned' });
+    }
 
     const { rows: r } = await pool.query(
       `SELECT id, allow_messages, is_banned FROM users WHERE LOWER(username) = LOWER($1)`,
@@ -20,13 +22,13 @@ async function sendMessage(req, res) {
     const recipient = r[0];
     if (!recipient || recipient.is_banned) return res.status(404).json({ error: 'user_not_found' });
     if (!recipient.allow_messages) return res.status(403).json({ error: 'messages_disabled' });
-    if (recipient.id === req.userId) return res.status(400).json({ error: 'cannot_message_self' });
+    if (req.userId && recipient.id === req.userId) return res.status(400).json({ error: 'cannot_message_self' });
 
     const { rows } = await pool.query(
       `INSERT INTO messages (recipient_id, sender_id, body)
        VALUES ($1, $2, $3)
        RETURNING id, created_at`,
-      [recipient.id, req.userId, body]
+      [recipient.id, req.userId || null, body]
     );
     res.status(201).json({ message: rows[0] });
   } catch (err) {
