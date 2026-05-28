@@ -85,6 +85,21 @@ export default function Inbox() {
 
   const link = profileUrl(user);
   const displayName = user?.display_name || user?.username || '';
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success(t('share.copied'));
+    } catch {
+      const el = document.createElement('input');
+      el.value = link;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      el.remove();
+      toast.success(t('share.copied'));
+    }
+  };
   const avatar = user?.avatar_url;
 
   const stats = [
@@ -117,9 +132,10 @@ export default function Inbox() {
           </div>
           <h1 className="mt-4 text-2xl font-extrabold text-ink">{displayName}</h1>
           <button
-            onClick={() => setShareOpen(true)}
-            className="mt-1 text-sm text-ink hover:underline break-all"
+            onClick={copyLink}
+            className="mt-1 text-sm text-ink underline underline-offset-2 decoration-ink/40 hover:decoration-ink break-all"
             dir="ltr"
+            title={t('share.copy')}
           >
             {link}
           </button>
