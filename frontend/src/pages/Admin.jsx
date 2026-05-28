@@ -151,13 +151,16 @@ function UsersTab({ me }) {
 function MessagesTab() {
   const { t, i18n } = useTranslation();
   const [q, setQ] = useState('');
+  const [fingerprintFilter, setFingerprintFilter] = useState('');
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const load = async (query = q) => {
+  const load = async (query = q, fp = fingerprintFilter) => {
     setLoading(true);
     try {
-      const { data } = await api.get('/admin/messages', { params: { q: query, limit: 100 } });
+      const params = { q: query, limit: 100 };
+      if (fp) params.fingerprint = fp;
+      const { data } = await api.get('/admin/messages', { params });
       setMessages(data.messages);
     } finally {
       setLoading(false);
@@ -165,10 +168,10 @@ function MessagesTab() {
   };
 
   useEffect(() => {
-    const id = setTimeout(load, 250);
+    const id = setTimeout(() => load(q, fingerprintFilter), 250);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q]);
+  }, [q, fingerprintFilter]);
 
   const remove = async (id) => {
     if (!confirm(t('admin.confirmDeleteMsg'))) return;
@@ -183,6 +186,25 @@ function MessagesTab() {
       setMessages((ms) => ms.map((m) => (m.id === id ? { ...m, is_hidden: data.is_hidden } : m)));
     } catch { toast.error(t('errors.server_error')); }
   };
+  const banDevice = async (fp) => {
+    if (!fp) return;
+    if (!confirm(t('admin.confirmBanDevice', {
+      defaultValue: 'Ban this device fingerprint? Future messages from this device will be rejected.',
+    }))) return;
+    try {
+      await api.post(`/admin/fingerprints/${encodeURIComponent(fp)}/ban`);
+      setMessages((ms) => ms.map((m) => (m.sender_fingerprint === fp ? { ...m, fingerprint_banned: true } : m)));
+      toast.success(t('admin.deviceBanned', { defaultValue: 'Device banned.' }));
+    } catch { toast.error(t('errors.server_error')); }
+  };
+  const unbanDevice = async (fp) => {
+    if (!fp) return;
+    try {
+      await api.delete(`/admin/fingerprints/${encodeURIComponent(fp)}/ban`);
+      setMessages((ms) => ms.map((m) => (m.sender_fingerprint === fp ? { ...m, fingerprint_banned: false } : m)));
+      toast.success(t('admin.deviceUnbanned', { defaultValue: 'Device unbanned.' }));
+    } catch { toast.error(t('errors.server_error')); }
+  };
 
   return (
     <div>
@@ -192,6 +214,20 @@ function MessagesTab() {
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />
+      {fingerprintFilter && (
+        <div className="mb-4 flex items-center gap-2 text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          <span className="text-amber-800">
+            {t('admin.filteringByDevice', { defaultValue: 'Filtering by device:' })}{' '}
+            <code dir="ltr" className="font-semibold">{fingerprintFilter.slice(0, 12)}…</code>
+          </span>
+          <button
+            onClick={() => setFingerprintFilter('')}
+            className="ms-auto text-amber-900 font-semibold hover:underline"
+          >
+            {t('admin.clearFilter', { defaultValue: 'Clear filter' })}
+          </button>
+        </div>
+      )}
       {loading ? (
         <div className="text-center text-ink-muted py-10">{t('common.loading')}</div>
       ) : messages.length === 0 ? (
@@ -219,10 +255,23 @@ function MessagesTab() {
                   </div>
                   <span>{formatDate(m.created_at, i18n.language)}</span>
                 </div>
-                {(m.sender_email || m.sender_ip) && (
+                {(m.sender_email || m.sender_ip || m.sender_fingerprint) && (
                   <div className="mt-1 text-[11px] text-ink-muted flex flex-wrap gap-x-3 gap-y-1" dir="ltr">
                     {m.sender_email && <span>email: {m.sender_email}</span>}
                     {m.sender_ip && <span>ip: {m.sender_ip}</span>}
+                    {m.sender_fingerprint && (
+                      <button
+                        type="button"
+                        onClick={() => setFingerprintFilter(m.sender_fingerprint)}
+                        title={m.sender_fingerprint}
+                        className={`underline-offset-2 hover:underline ${
+                          m.fingerprint_banned ? 'text-red-600 font-semibold' : 'text-brand-700'
+                        }`}
+                      >
+                        device: {m.sender_fingerprint.slice(0, 10)}…
+                        {m.fingerprint_banned && ' (banned)'}
+                      </button>
+                    )}
                     {m.sender_user_agent && (
                       <span className="truncate max-w-[260px]" title={m.sender_user_agent}>
                         ua: {m.sender_user_agent}
@@ -231,13 +280,30 @@ function MessagesTab() {
                   </div>
                 )}
                 <p className="mt-2 text-ink whitespace-pre-wrap leading-relaxed">{m.body}</p>
-                <div className="mt-3 flex items-center gap-2">
+                <div className="mt-3 flex items-center gap-2 flex-wrap">
                   <button onClick={() => hideToggle(m.id)} className="btn-outline text-xs">
                     {m.is_hidden ? t('admin.unhide') : t('admin.hide')}
                   </button>
                   <button onClick={() => remove(m.id)} className="btn text-xs bg-red-600 text-white hover:bg-red-700">
                     {t('admin.deleteMsg')}
                   </button>
+                  {m.sender_fingerprint && (
+                    m.fingerprint_banned ? (
+                      <button
+                        onClick={() => unbanDevice(m.sender_fingerprint)}
+                        className="btn-outline text-xs"
+                      >
+                        {t('admin.unbanDevice', { defaultValue: 'Unban device' })}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => banDevice(m.sender_fingerprint)}
+                        className="btn text-xs bg-amber-600 text-white hover:bg-amber-700"
+                      >
+                        {t('admin.banDevice', { defaultValue: 'Ban device' })}
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
             );

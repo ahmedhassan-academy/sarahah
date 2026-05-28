@@ -33,6 +33,9 @@ async function sendMessage(req, res) {
   const username = String(req.params.username || '').trim();
   const body = String(req.body.body || '').trim();
   const googleIdToken = req.body.google_id_token ? String(req.body.google_id_token) : '';
+  const fingerprintRaw = req.body.fingerprint ? String(req.body.fingerprint).trim() : '';
+  // FingerprintJS visitorIds are 20-char hex; accept up to 128 chars for safety.
+  const fingerprint = fingerprintRaw.length > 0 && fingerprintRaw.length <= 128 ? fingerprintRaw : null;
 
   if (!body) return res.status(400).json({ error: 'empty_message' });
   if (body.length > MAX_BODY) return res.status(400).json({ error: 'too_long' });
@@ -44,6 +47,14 @@ async function sendMessage(req, res) {
   }
 
   try {
+    if (fingerprint) {
+      const ban = await pool.query(
+        `SELECT 1 FROM banned_fingerprints WHERE fingerprint = $1`,
+        [fingerprint]
+      );
+      if (ban.rowCount > 0) return res.status(403).json({ error: 'device_banned' });
+    }
+
     if (req.userId) {
       const senderCheck = await pool.query(`SELECT is_banned FROM users WHERE id = $1`, [req.userId]);
       if (senderCheck.rows[0]?.is_banned) return res.status(403).json({ error: 'account_banned' });
@@ -65,8 +76,8 @@ async function sendMessage(req, res) {
       `INSERT INTO messages
          (recipient_id, sender_id, body,
           sender_email, sender_name, sender_picture, sender_google_sub,
-          sender_ip, sender_user_agent)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          sender_ip, sender_user_agent, sender_fingerprint)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id, created_at`,
       [
         recipient.id,
@@ -78,6 +89,7 @@ async function sendMessage(req, res) {
         googleIdentity?.sub || null,
         ip,
         ua,
+        fingerprint,
       ]
     );
     res.status(201).json({ message: rows[0] });

@@ -1,6 +1,6 @@
 const pool = require('./db');
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 async function ensureSchemaVersionTable() {
   await pool.query(`
@@ -76,6 +76,22 @@ async function applyAll() {
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_google_sub TEXT`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_ip TEXT`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_user_agent TEXT`);
+
+  // v4 — device fingerprint capture + per-device bans
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_fingerprint TEXT`);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_messages_fingerprint
+      ON messages (sender_fingerprint)
+      WHERE sender_fingerprint IS NOT NULL
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS banned_fingerprints (
+      fingerprint TEXT PRIMARY KEY,
+      banned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      banned_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      reason TEXT
+    )
+  `);
 }
 
 async function bootstrapAdmins() {

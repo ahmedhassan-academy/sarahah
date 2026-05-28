@@ -55,23 +55,32 @@ async function listMessages(req, res) {
   const limit = Math.min(parseInt(req.query.limit || '50', 10) || 50, 200);
   const offset = Math.max(parseInt(req.query.offset || '0', 10) || 0, 0);
   const q = String(req.query.q || '').trim().toLowerCase();
+  const fingerprint = String(req.query.fingerprint || '').trim();
 
   try {
     const params = [];
-    let where = '1=1';
+    const conds = [];
     if (q) {
       params.push(`%${q}%`);
-      where = `LOWER(m.body) LIKE $${params.length}`;
+      conds.push(`LOWER(m.body) LIKE $${params.length}`);
     }
+    if (fingerprint) {
+      params.push(fingerprint);
+      conds.push(`m.sender_fingerprint = $${params.length}`);
+    }
+    const where = conds.length ? conds.join(' AND ') : '1=1';
     params.push(limit, offset);
     const { rows } = await pool.query(
       `SELECT
          m.id, m.body, m.is_read, m.is_favorite, m.is_hidden, m.created_at,
          m.sender_id, m.recipient_id,
          m.sender_email, m.sender_name, m.sender_picture, m.sender_google_sub,
-         m.sender_ip, m.sender_user_agent,
+         m.sender_ip, m.sender_user_agent, m.sender_fingerprint,
          r.username AS recipient_username,
-         s.username AS sender_username
+         s.username AS sender_username,
+         (SELECT EXISTS (
+            SELECT 1 FROM banned_fingerprints bf WHERE bf.fingerprint = m.sender_fingerprint
+         )) AS fingerprint_banned
        FROM messages m
        JOIN users r ON r.id = m.recipient_id
        LEFT JOIN users s ON s.id = m.sender_id
@@ -83,6 +92,43 @@ async function listMessages(req, res) {
     res.json({ messages: rows });
   } catch (err) {
     console.error('[admin/listMessages]', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+}
+
+async function banFingerprint(req, res) {
+  const fingerprint = String(req.params.fingerprint || '').trim();
+  const reason = req.body?.reason ? String(req.body.reason).slice(0, 200) : null;
+  if (!fingerprint || fingerprint.length > 128) {
+    return res.status(400).json({ error: 'bad_fingerprint' });
+  }
+  try {
+    await pool.query(
+      `INSERT INTO banned_fingerprints (fingerprint, banned_by, reason)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (fingerprint) DO UPDATE
+         SET banned_at = NOW(), banned_by = EXCLUDED.banned_by, reason = EXCLUDED.reason`,
+      [fingerprint, req.userId, reason]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[admin/banFingerprint]', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+}
+
+async function unbanFingerprint(req, res) {
+  const fingerprint = String(req.params.fingerprint || '').trim();
+  if (!fingerprint) return res.status(400).json({ error: 'bad_fingerprint' });
+  try {
+    const { rowCount } = await pool.query(
+      `DELETE FROM banned_fingerprints WHERE fingerprint = $1`,
+      [fingerprint]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'not_found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[admin/unbanFingerprint]', err);
     res.status(500).json({ error: 'server_error' });
   }
 }
@@ -176,4 +222,6 @@ module.exports = {
   setAdmin,
   deleteMessage,
   toggleHide,
+  banFingerprint,
+  unbanFingerprint,
 };

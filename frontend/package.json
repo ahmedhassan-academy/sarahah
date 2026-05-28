@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fingerprintjs/fingerprintjs": "^5.2.0",
     "@react-oauth/google": "^0.13.5",
     "axios": "^1.7.7",
     "i18next": "^23.15.1",

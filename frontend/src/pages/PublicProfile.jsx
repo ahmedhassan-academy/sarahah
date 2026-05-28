@@ -1,12 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { GoogleLogin } from '@react-oauth/google';
+import FingerprintJS from '@fingerprintjs/fingerprintjs';
 import api from '../api/client';
 import { useAuth } from '../store/auth';
 
 const MAX = 1000;
+
+// Lazy-load FingerprintJS once per page lifetime.
+let fpAgentPromise = null;
+function getFpAgent() {
+  if (!fpAgentPromise) fpAgentPromise = FingerprintJS.load();
+  return fpAgentPromise;
+}
 
 function decodeJwtPayload(jwt) {
   try {
@@ -29,6 +37,7 @@ export default function PublicProfile() {
   const [busy, setBusy] = useState(false);
   const [googleIdToken, setGoogleIdToken] = useState('');
   const [googleProfile, setGoogleProfile] = useState(null); // { name, picture, email }
+  const fingerprintRef = useRef('');
 
   useEffect(() => {
     let alive = true;
@@ -46,6 +55,22 @@ export default function PublicProfile() {
     return () => { alive = false; };
   }, [username]);
 
+  // Pre-compute device fingerprint silently as soon as the page mounts.
+  // Failure is non-fatal; we still let the user send.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const fp = await getFpAgent();
+        const r = await fp.get();
+        if (alive && r && r.visitorId) fingerprintRef.current = r.visitorId;
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
   const send = async (e) => {
     e.preventDefault();
     if (!body.trim()) return;
@@ -57,6 +82,7 @@ export default function PublicProfile() {
     try {
       const payload = { body };
       if (!user && googleIdToken) payload.google_id_token = googleIdToken;
+      if (fingerprintRef.current) payload.fingerprint = fingerprintRef.current;
       await api.post(`/messages/to/${encodeURIComponent(username)}`, payload);
       setBody('');
       toast.success(t('profile.sent'));
