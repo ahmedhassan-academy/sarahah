@@ -152,17 +152,6 @@ export default function Inbox() {
           <div className="mt-6 grid grid-cols-3 gap-2">
             <button
               type="button"
-              onClick={() => (window.location.href = '/help')}
-              className="col-span-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-accent-yellow text-accent-yellowText font-semibold py-2.5 text-sm hover:brightness-95 transition"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M9.5 9a2.5 2.5 0 1 1 4.4 1.6c-.7.8-1.4 1.2-1.4 2.4M12 17h.01" />
-              </svg>
-              {t('inbox.help')}
-            </button>
-            <button
-              type="button"
               onClick={() => setShareOpen(true)}
               className="col-span-2 inline-flex items-center justify-center gap-2 rounded-xl bg-accent-blue text-accent-blueText font-semibold py-2.5 text-sm hover:brightness-95 transition"
             >
@@ -174,11 +163,22 @@ export default function Inbox() {
               </svg>
               {t('inbox.share')}
             </button>
+            <button
+              type="button"
+              onClick={() => (window.location.href = '/help')}
+              className="col-span-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-accent-yellow text-accent-yellowText font-semibold py-2.5 text-sm hover:brightness-95 transition"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.5 9a2.5 2.5 0 1 1 4.4 1.6c-.7.8-1.4 1.2-1.4 2.4M12 17h.01" />
+              </svg>
+              {t('inbox.help')}
+            </button>
           </div>
         </div>
 
-        <div className="px-2 sm:px-4 border-t border-slate-100">
-          <div className="grid grid-cols-4 gap-1 p-1">
+        <div className="px-3 sm:px-5 pb-4 border-t border-slate-100 pt-3">
+          <div className="grid grid-cols-4 gap-1 p-1 rounded-2xl bg-slate-100">
             {TABS.map((k) => (
               <button
                 key={k}
