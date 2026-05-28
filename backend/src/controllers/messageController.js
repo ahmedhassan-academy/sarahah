@@ -45,8 +45,20 @@ async function sendMessage(req, res) {
 
   let googleIdentity = null;
   if (!req.userId) {
-    googleIdentity = await verifyGoogleIdToken(googleIdToken);
-    if (!googleIdentity) return res.status(401).json({ error: 'sender_identity_required' });
+    if (req.googleVisitorId) {
+      const { rows: vrows } = await pool.query(
+        `SELECT id, google_sub, email, name, picture, is_banned
+         FROM google_visitors WHERE id = $1`,
+        [req.googleVisitorId]
+      );
+      const v = vrows[0];
+      if (!v) return res.status(401).json({ error: 'sender_identity_required' });
+      if (v.is_banned) return res.status(403).json({ error: 'account_banned' });
+      googleIdentity = { sub: v.google_sub, email: v.email, name: v.name, picture: v.picture };
+    } else {
+      googleIdentity = await verifyGoogleIdToken(googleIdToken);
+      if (!googleIdentity) return res.status(401).json({ error: 'sender_identity_required' });
+    }
   }
 
   try {

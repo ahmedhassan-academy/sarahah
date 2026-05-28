@@ -5,8 +5,15 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((cfg) => {
-  const token = localStorage.getItem('sarahah_token');
-  if (token) cfg.headers.Authorization = `Bearer ${token}`;
+  const userToken = localStorage.getItem('sarahah_token');
+  if (userToken) {
+    cfg.headers.Authorization = `Bearer ${userToken}`;
+    return cfg;
+  }
+  const visitorToken = localStorage.getItem('sarahah_google_token');
+  if (visitorToken) {
+    cfg.headers.Authorization = `Bearer ${visitorToken}`;
+  }
   return cfg;
 });
 
@@ -16,7 +23,12 @@ api.interceptors.response.use(
     if (err.response?.status === 401) {
       const path = window.location.pathname;
       if (!path.startsWith('/login') && !path.startsWith('/register')) {
-        localStorage.removeItem('sarahah_token');
+        if (localStorage.getItem('sarahah_token')) {
+          localStorage.removeItem('sarahah_token');
+        } else if (localStorage.getItem('sarahah_google_token')) {
+          localStorage.removeItem('sarahah_google_token');
+          localStorage.removeItem('sarahah_google_profile');
+        }
       }
     }
     return Promise.reject(err);

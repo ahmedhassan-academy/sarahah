@@ -1,6 +1,6 @@
 const pool = require('./db');
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 async function ensureSchemaVersionTable() {
   await pool.query(`
@@ -107,6 +107,22 @@ async function applyAll() {
     CREATE INDEX IF NOT EXISTS idx_messages_sender_saved_created
       ON messages (sender_id, created_at DESC)
       WHERE save_to_sent = TRUE
+  `);
+
+  // v6 — persistent Google visitor sessions (anonymous senders signed in via Google)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS google_visitors (
+      id SERIAL PRIMARY KEY,
+      google_sub TEXT NOT NULL UNIQUE,
+      email TEXT NOT NULL,
+      name TEXT,
+      picture TEXT,
+      first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      is_banned BOOLEAN NOT NULL DEFAULT FALSE,
+      banned_at TIMESTAMPTZ,
+      banned_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+    )
   `);
 }
 

@@ -9,7 +9,9 @@ import { useAuth } from '../store/auth';
 import { profileUrl } from '../lib/host';
 
 const MAX = 1000;
-const GOOGLE_AUTH_KEY = 'sarahah:googleAuth';
+const VISITOR_TOKEN_KEY = 'sarahah_google_token';
+const VISITOR_PROFILE_KEY = 'sarahah_google_profile';
+const LEGACY_VISITOR_KEY = 'sarahah:googleAuth';
 
 let fpAgentPromise = null;
 function getFpAgent() {
@@ -17,45 +19,32 @@ function getFpAgent() {
   return fpAgentPromise;
 }
 
-function decodeJwtPayload(jwt) {
+function loadVisitorProfile() {
   try {
-    const part = jwt.split('.')[1];
-    const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'));
-    return JSON.parse(decodeURIComponent(escape(json)));
-  } catch {
-    return null;
-  }
-}
-
-function loadSavedGoogleAuth() {
-  try {
-    const raw = localStorage.getItem(GOOGLE_AUTH_KEY);
+    // Clean up the 1-hour token storage from the previous version.
+    localStorage.removeItem(LEGACY_VISITOR_KEY);
+    const raw = localStorage.getItem(VISITOR_PROFILE_KEY);
     if (!raw) return null;
-    const saved = JSON.parse(raw);
-    if (!saved?.token || !saved?.expMs || Date.now() >= saved.expMs) {
-      localStorage.removeItem(GOOGLE_AUTH_KEY);
-      return null;
-    }
-    return saved;
+    if (!localStorage.getItem(VISITOR_TOKEN_KEY)) return null;
+    return JSON.parse(raw);
   } catch {
     return null;
   }
 }
 
-function saveGoogleAuth(token, profile, expSeconds) {
+function saveVisitorSession(token, profile) {
   try {
-    localStorage.setItem(
-      GOOGLE_AUTH_KEY,
-      JSON.stringify({ token, profile, expMs: expSeconds * 1000 }),
-    );
+    localStorage.setItem(VISITOR_TOKEN_KEY, token);
+    localStorage.setItem(VISITOR_PROFILE_KEY, JSON.stringify(profile));
   } catch {
     /* ignore */
   }
 }
 
-function clearGoogleAuth() {
+function clearVisitorSession() {
   try {
-    localStorage.removeItem(GOOGLE_AUTH_KEY);
+    localStorage.removeItem(VISITOR_TOKEN_KEY);
+    localStorage.removeItem(VISITOR_PROFILE_KEY);
   } catch {
     /* ignore */
   }
@@ -87,8 +76,7 @@ export default function PublicProfile({ usernameOverride }) {
   const [state, setState] = useState('loading');
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
-  const [googleIdToken, setGoogleIdToken] = useState(() => loadSavedGoogleAuth()?.token || '');
-  const [googleProfile, setGoogleProfile] = useState(() => loadSavedGoogleAuth()?.profile || null);
+  const [googleProfile, setGoogleProfile] = useState(() => loadVisitorProfile());
   const [isPrivate, setIsPrivate] = useState(true);
   const [saveToSent, setSaveToSent] = useState(true);
   const [publicMessages, setPublicMessages] = useState([]);
@@ -144,6 +132,27 @@ export default function PublicProfile({ usernameOverride }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (user) return;
+    if (!googleProfile) return;
+    let alive = true;
+    api
+      .get('/auth/google-me')
+      .then(({ data }) => {
+        if (!alive) return;
+        setGoogleProfile(data.profile);
+        const tok = localStorage.getItem(VISITOR_TOKEN_KEY);
+        if (tok) saveVisitorSession(tok, data.profile);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setGoogleProfile(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [user]);
+
   const suggestRandom = () => {
     const list = t('profile.suggestions', { returnObjects: true });
     if (!Array.isArray(list) || list.length === 0) return;
@@ -154,19 +163,9 @@ export default function PublicProfile({ usernameOverride }) {
   const send = async (e) => {
     e.preventDefault();
     if (!body.trim()) return;
-    if (!user && !googleIdToken) {
+    if (!user && !googleProfile) {
       toast.error(t('profile.signInFirst', { defaultValue: 'Please sign in with Google to send a message.' }));
       return;
-    }
-    if (!user && googleIdToken) {
-      const payload = decodeJwtPayload(googleIdToken);
-      if (!payload?.exp || Date.now() >= payload.exp * 1000) {
-        setGoogleIdToken('');
-        setGoogleProfile(null);
-        clearGoogleAuth();
-        toast.error(t('profile.signInFirst', { defaultValue: 'Please sign in with Google to send a message.' }));
-        return;
-      }
     }
     setBusy(true);
     try {
@@ -175,7 +174,6 @@ export default function PublicProfile({ usernameOverride }) {
         is_public: !isPrivate,
         save_to_sent: !!user && saveToSent,
       };
-      if (!user && googleIdToken) payload.google_id_token = googleIdToken;
       if (fingerprintRef.current) payload.fingerprint = fingerprintRef.current;
       await api.post(`/messages/to/${encodeURIComponent(username)}`, payload);
       setBody('');
@@ -188,24 +186,28 @@ export default function PublicProfile({ usernameOverride }) {
       }
     } catch (err) {
       const code = err.response?.data?.error || 'server_error';
+      if (err.response?.status === 401) setGoogleProfile(null);
       toast.error(t(`errors.${code}`, { defaultValue: t('errors.server_error') }));
     } finally {
       setBusy(false);
     }
   };
 
-  const onGoogleSuccess = (credentialResponse) => {
+  const onGoogleSuccess = async (credentialResponse) => {
     const idToken = credentialResponse?.credential || '';
     if (!idToken) return;
-    const payload = decodeJwtPayload(idToken);
-    const profile = {
-      name: payload?.name || '',
-      picture: payload?.picture || '',
-      email: payload?.email || '',
-    };
-    setGoogleIdToken(idToken);
-    setGoogleProfile(profile);
-    if (payload?.exp) saveGoogleAuth(idToken, profile, payload.exp);
+    try {
+      const { data } = await api.post('/auth/google-session', { id_token: idToken });
+      saveVisitorSession(data.token, data.profile);
+      setGoogleProfile(data.profile);
+    } catch (err) {
+      const code = err.response?.data?.error;
+      const msg =
+        code === 'account_banned'
+          ? t('errors.account_banned', { defaultValue: 'This account is banned.' })
+          : t('profile.googleFailed', { defaultValue: 'Google sign-in failed.' });
+      toast.error(msg);
+    }
   };
 
   const onGoogleError = () => {
@@ -213,9 +215,8 @@ export default function PublicProfile({ usernameOverride }) {
   };
 
   const signOutGoogle = () => {
-    setGoogleIdToken('');
     setGoogleProfile(null);
-    clearGoogleAuth();
+    clearVisitorSession();
   };
 
   const remaining = MAX - body.length;
@@ -323,7 +324,7 @@ export default function PublicProfile({ usernameOverride }) {
         <div className="card mt-5 p-6 text-center text-slate-600">{t('profile.disabled')}</div>
       ) : (
         <form onSubmit={send} className="card mt-5 p-5 sm:p-6">
-          {!user && !googleIdToken ? (
+          {!user && !googleProfile ? (
             <div className="text-center py-2">
               <p className="text-sm text-slate-700 mb-3">
                 {t('profile.sendMessageTo')}{' '}
@@ -348,75 +349,83 @@ export default function PublicProfile({ usernameOverride }) {
             </div>
           ) : (
             <>
-              <div className="flex items-start gap-3">
-                <div className="shrink-0 w-9 h-9 rounded-full bg-slate-100 grid place-items-center text-slate-400">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3.5 20a7.5 7.5 0 0 1 17 0" />
-                    <circle cx="12" cy="8" r="4.5" />
-                  </svg>
-                </div>
-                <textarea
-                  className="input flex-1 min-h-[110px] resize-y border-0 bg-slate-50 focus:bg-white"
-                  placeholder={t('profile.placeholder')}
-                  value={body}
-                  onChange={(e) => setBody(e.target.value.slice(0, MAX))}
-                  maxLength={MAX}
-                  required
-                />
-              </div>
-
-              <div className="mt-3 space-y-2">
-                <label className="flex items-center justify-between gap-3 cursor-pointer">
-                  <span className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="4" y="11" width="16" height="10" rx="2" />
-                      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+              <div className="rounded-2xl bg-slate-100 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="shrink-0 w-9 h-9 rounded-full bg-slate-200 grid place-items-center text-slate-400">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3.5 20a7.5 7.5 0 0 1 17 0" />
+                      <circle cx="12" cy="8" r="4.5" />
                     </svg>
-                    {t('profile.privateToggle')}
-                  </span>
-                  <span
-                    className={`relative inline-block w-10 h-6 rounded-full transition-colors ${
-                      isPrivate ? 'bg-brand-500' : 'bg-slate-300'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={isPrivate}
-                      onChange={(e) => setIsPrivate(e.target.checked)}
-                    />
-                    <span
-                      className={`absolute top-0.5 ${isPrivate ? 'end-0.5' : 'start-0.5'} w-5 h-5 rounded-full bg-white shadow transition-all`}
-                    />
-                  </span>
-                </label>
+                  </div>
+                  <textarea
+                    className="flex-1 min-h-[120px] resize-none border-0 bg-transparent outline-none placeholder:text-slate-400 text-slate-800"
+                    placeholder={t('profile.placeholder')}
+                    value={body}
+                    onChange={(e) => setBody(e.target.value.slice(0, MAX))}
+                    maxLength={MAX}
+                    required
+                  />
+                </div>
 
-                {user && (
-                  <label className="flex items-center justify-between gap-3 cursor-pointer">
-                    <span className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                        <path d="M17 21v-8H7v8M7 3v5h8" />
+                <div className="mt-3 flex items-end justify-between gap-3">
+                  <div className="flex items-center gap-3 text-slate-500">
+                    <button type="button" className="hover:text-slate-700 transition-colors" aria-label="attach" title="attach">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                       </svg>
-                      {t('profile.saveToSent')}
-                    </span>
-                    <span
-                      className={`relative inline-block w-10 h-6 rounded-full transition-colors ${
-                        saveToSent ? 'bg-brand-500' : 'bg-slate-300'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        className="sr-only"
-                        checked={saveToSent}
-                        onChange={(e) => setSaveToSent(e.target.checked)}
-                      />
+                    </button>
+                    <button type="button" className="hover:text-slate-700 transition-colors" aria-label="emoji" title="emoji">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                        <line x1="9" y1="9" x2="9.01" y2="9" />
+                        <line x1="15" y1="9" x2="15.01" y2="9" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5 items-end">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <span className="text-sm font-semibold text-slate-700">{t('profile.privateToggle')}</span>
                       <span
-                        className={`absolute top-0.5 ${saveToSent ? 'end-0.5' : 'start-0.5'} w-5 h-5 rounded-full bg-white shadow transition-all`}
-                      />
-                    </span>
-                  </label>
-                )}
+                        className={`relative inline-block w-10 h-6 rounded-full transition-colors ${
+                          isPrivate ? 'bg-brand-500' : 'bg-slate-300'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="sr-only"
+                          checked={isPrivate}
+                          onChange={(e) => setIsPrivate(e.target.checked)}
+                        />
+                        <span
+                          className={`absolute top-0.5 ${isPrivate ? 'end-0.5' : 'start-0.5'} w-5 h-5 rounded-full bg-white shadow transition-all`}
+                        />
+                      </span>
+                    </label>
+
+                    {user && (
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <span className="text-sm font-semibold text-slate-700">{t('profile.saveToSent')}</span>
+                        <span
+                          className={`relative inline-block w-10 h-6 rounded-full transition-colors ${
+                            saveToSent ? 'bg-brand-500' : 'bg-slate-300'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={saveToSent}
+                            onChange={(e) => setSaveToSent(e.target.checked)}
+                          />
+                          <span
+                            className={`absolute top-0.5 ${saveToSent ? 'end-0.5' : 'start-0.5'} w-5 h-5 rounded-full bg-white shadow transition-all`}
+                          />
+                        </span>
+                      </label>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
@@ -429,16 +438,13 @@ export default function PublicProfile({ usernameOverride }) {
                   🎲 <span>{t('profile.suggest')}</span>
                 </button>
                 <span>
-                  {t('profile.remaining')}: {remaining}
+                  {t('profile.remaining')} : {remaining}
                 </span>
               </div>
 
               {googleProfile && (
-                <div className="mt-3 flex items-center gap-2 text-xs text-slate-500 bg-slate-50 rounded-lg p-2">
-                  {googleProfile.picture && (
-                    <img src={googleProfile.picture} alt="" className="w-6 h-6 rounded-full" />
-                  )}
-                  <span className="flex-1 truncate" dir="ltr">{googleProfile.email}</span>
+                <div className="mt-3 flex items-center justify-end gap-2 text-xs text-slate-400">
+                  <span dir="ltr" className="truncate">{googleProfile.email}</span>
                   <button
                     type="button"
                     onClick={signOutGoogle}
