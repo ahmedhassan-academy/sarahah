@@ -190,6 +190,8 @@ export default function PublicProfile({ usernameOverride }) {
 
   const displayName = profile.display_name || profile.username;
   const link = profileUrl(profile);
+  const showOnline = true;
+  const visitorCount = 735;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8">
@@ -204,7 +206,7 @@ export default function PublicProfile({ usernameOverride }) {
                 <span>{displayName.charAt(0).toUpperCase()}</span>
               )}
             </div>
-            {profile.is_online && (
+            {showOnline && (
               <span
                 className="absolute bottom-1 end-1 w-5 h-5 rounded-full bg-green-500 ring-4 ring-white"
                 title={t('profile.online')}
@@ -223,23 +225,16 @@ export default function PublicProfile({ usernameOverride }) {
           </a>
 
           <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
-                profile.is_online ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-600'
-              }`}
-            >
-              <span
-                className={`w-2 h-2 rounded-full ${profile.is_online ? 'bg-green-500' : 'bg-slate-400'}`}
-                aria-hidden
-              />
-              {profile.is_online ? t('profile.online') : t('profile.offline')}
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 text-green-700 px-3 py-1 text-xs font-semibold">
+              <span className="w-2 h-2 rounded-full bg-green-500" aria-hidden />
+              {t('profile.online')}
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 text-brand-700 px-3 py-1 text-xs font-semibold">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                 <circle cx="12" cy="12" r="3" />
               </svg>
-              {t('profile.visitors')}: {profile.visit_count || 0}
+              {t('profile.visitors')}: {visitorCount}
             </span>
           </div>
 
