@@ -321,9 +321,9 @@ export default function PublicProfile({ usernameOverride }) {
       </div>
 
       {!profile.allow_messages ? (
-        <div className="card mt-5 p-6 text-center text-slate-600">{t('profile.disabled')}</div>
+        <div className="card mt-16 p-6 text-center text-slate-600">{t('profile.disabled')}</div>
       ) : (
-        <form onSubmit={send} className="card mt-5 p-5 sm:p-6">
+        <form onSubmit={send} className="card mt-16 p-5 sm:p-6">
           {!user && !googleProfile ? (
             <div className="text-center py-2">
               <p className="text-sm text-slate-700 mb-3">
@@ -404,26 +404,24 @@ export default function PublicProfile({ usernameOverride }) {
                       </span>
                     </label>
 
-                    {user && (
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <span className="text-sm font-semibold text-slate-700">{t('profile.saveToSent')}</span>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <span className="text-sm font-semibold text-slate-700">{t('profile.saveToSent')}</span>
+                      <span
+                        className={`relative inline-block w-10 h-6 rounded-full transition-colors ${
+                          saveToSent ? 'bg-brand-500' : 'bg-slate-300'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="sr-only"
+                          checked={saveToSent}
+                          onChange={(e) => setSaveToSent(e.target.checked)}
+                        />
                         <span
-                          className={`relative inline-block w-10 h-6 rounded-full transition-colors ${
-                            saveToSent ? 'bg-brand-500' : 'bg-slate-300'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            className="sr-only"
-                            checked={saveToSent}
-                            onChange={(e) => setSaveToSent(e.target.checked)}
-                          />
-                          <span
-                            className={`absolute top-0.5 ${saveToSent ? 'end-0.5' : 'start-0.5'} w-5 h-5 rounded-full bg-white shadow transition-all`}
-                          />
-                        </span>
-                      </label>
-                    )}
+                          className={`absolute top-0.5 ${saveToSent ? 'end-0.5' : 'start-0.5'} w-5 h-5 rounded-full bg-white shadow transition-all`}
+                        />
+                      </span>
+                    </label>
                   </div>
                 </div>
               </div>
@@ -441,19 +439,6 @@ export default function PublicProfile({ usernameOverride }) {
                   {t('profile.remaining')} : {remaining}
                 </span>
               </div>
-
-              {googleProfile && (
-                <div className="mt-3 flex items-center justify-end gap-2 text-xs text-slate-400">
-                  <span dir="ltr" className="truncate">{googleProfile.email}</span>
-                  <button
-                    type="button"
-                    onClick={signOutGoogle}
-                    className="text-brand-700 font-semibold hover:underline"
-                  >
-                    {t('profile.signOut', { defaultValue: 'Sign out' })}
-                  </button>
-                </div>
-              )}
 
               <div className="mt-4">
                 <button
