@@ -9,6 +9,7 @@ import { useAuth } from '../store/auth';
 import { profileUrl } from '../lib/host';
 
 const MAX = 1000;
+const GOOGLE_AUTH_KEY = 'sarahah:googleAuth';
 
 let fpAgentPromise = null;
 function getFpAgent() {
@@ -23,6 +24,40 @@ function decodeJwtPayload(jwt) {
     return JSON.parse(decodeURIComponent(escape(json)));
   } catch {
     return null;
+  }
+}
+
+function loadSavedGoogleAuth() {
+  try {
+    const raw = localStorage.getItem(GOOGLE_AUTH_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    if (!saved?.token || !saved?.expMs || Date.now() >= saved.expMs) {
+      localStorage.removeItem(GOOGLE_AUTH_KEY);
+      return null;
+    }
+    return saved;
+  } catch {
+    return null;
+  }
+}
+
+function saveGoogleAuth(token, profile, expSeconds) {
+  try {
+    localStorage.setItem(
+      GOOGLE_AUTH_KEY,
+      JSON.stringify({ token, profile, expMs: expSeconds * 1000 }),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearGoogleAuth() {
+  try {
+    localStorage.removeItem(GOOGLE_AUTH_KEY);
+  } catch {
+    /* ignore */
   }
 }
 
@@ -52,8 +87,8 @@ export default function PublicProfile({ usernameOverride }) {
   const [state, setState] = useState('loading');
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
-  const [googleIdToken, setGoogleIdToken] = useState('');
-  const [googleProfile, setGoogleProfile] = useState(null);
+  const [googleIdToken, setGoogleIdToken] = useState(() => loadSavedGoogleAuth()?.token || '');
+  const [googleProfile, setGoogleProfile] = useState(() => loadSavedGoogleAuth()?.profile || null);
   const [isPrivate, setIsPrivate] = useState(true);
   const [saveToSent, setSaveToSent] = useState(true);
   const [publicMessages, setPublicMessages] = useState([]);
@@ -123,6 +158,16 @@ export default function PublicProfile({ usernameOverride }) {
       toast.error(t('profile.signInFirst', { defaultValue: 'Please sign in with Google to send a message.' }));
       return;
     }
+    if (!user && googleIdToken) {
+      const payload = decodeJwtPayload(googleIdToken);
+      if (!payload?.exp || Date.now() >= payload.exp * 1000) {
+        setGoogleIdToken('');
+        setGoogleProfile(null);
+        clearGoogleAuth();
+        toast.error(t('profile.signInFirst', { defaultValue: 'Please sign in with Google to send a message.' }));
+        return;
+      }
+    }
     setBusy(true);
     try {
       const payload = {
@@ -153,12 +198,14 @@ export default function PublicProfile({ usernameOverride }) {
     const idToken = credentialResponse?.credential || '';
     if (!idToken) return;
     const payload = decodeJwtPayload(idToken);
-    setGoogleIdToken(idToken);
-    setGoogleProfile({
+    const profile = {
       name: payload?.name || '',
       picture: payload?.picture || '',
       email: payload?.email || '',
-    });
+    };
+    setGoogleIdToken(idToken);
+    setGoogleProfile(profile);
+    if (payload?.exp) saveGoogleAuth(idToken, profile, payload.exp);
   };
 
   const onGoogleError = () => {
@@ -168,6 +215,7 @@ export default function PublicProfile({ usernameOverride }) {
   const signOutGoogle = () => {
     setGoogleIdToken('');
     setGoogleProfile(null);
+    clearGoogleAuth();
   };
 
   const remaining = MAX - body.length;
