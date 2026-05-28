@@ -7,10 +7,10 @@ function InfinityLogo({ className = '' }) {
   return (
     <svg viewBox="0 0 64 32" className={className} aria-hidden="true">
       <path
-        d="M16 6a10 10 0 1 0 0 20c4.5 0 7.5-3 11-7l5-6c3.5-4 6.5-7 11-7a10 10 0 1 1 0 20c-4.5 0-7.5-3-11-7l-5-6c-3.5-4-6.5-7-11-7z"
+        d="M 32 16 C 24 4 8 4 6 16 C 4 28 24 28 32 16 C 40 4 60 4 58 16 C 56 28 40 28 34 22"
         fill="none"
         stroke="currentColor"
-        strokeWidth="3.5"
+        strokeWidth="4"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
