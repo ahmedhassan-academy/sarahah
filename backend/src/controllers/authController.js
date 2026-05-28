@@ -89,8 +89,9 @@ async function login(req, res) {
 async function me(req, res) {
   try {
     const { rows } = await pool.query(
-      `SELECT id, username, email, display_name, bio, avatar_url, allow_messages, is_admin, is_banned, created_at
-       FROM users WHERE id = $1`,
+      `UPDATE users SET last_seen = NOW()
+       WHERE id = $1
+       RETURNING id, username, email, display_name, bio, avatar_url, allow_messages, is_admin, is_banned, created_at, last_seen, visit_count`,
       [req.userId]
     );
     if (!rows[0]) return res.status(404).json({ error: 'not_found' });

@@ -19,7 +19,12 @@ export default function Inbox() {
   const [sortNewestFirst, setSortNewestFirst] = useState(true);
   const [shareOpen, setShareOpen] = useState(false);
 
-  const filterParam = tab === 'favorites' ? 'favorite' : 'all';
+  const filterParam = {
+    inbox: 'all',
+    favorites: 'favorite',
+    sent: 'sent',
+    public: 'public',
+  }[tab] || 'all';
 
   const load = async () => {
     setLoading(true);
@@ -33,8 +38,7 @@ export default function Inbox() {
   };
 
   useEffect(() => {
-    if (tab === 'inbox' || tab === 'favorites') load();
-    else setLoading(false);
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
@@ -115,8 +119,6 @@ export default function Inbox() {
     favorites: t('inbox.sectionFavorites'),
     public: t('inbox.sectionPublic'),
   }[tab];
-
-  const isReadOnlyTab = tab === 'sent' || tab === 'public';
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8">
@@ -211,12 +213,7 @@ export default function Inbox() {
       </div>
 
       <div className="mt-3 space-y-3">
-        {isReadOnlyTab ? (
-          <div className="card p-10 text-center text-slate-500">
-            <div className="text-3xl mb-2">🚧</div>
-            {t('inbox.comingSoon')}
-          </div>
-        ) : loading ? (
+        {loading ? (
           <div className="text-center text-slate-500 py-12">{t('common.loading')}</div>
         ) : sortedMessages.length === 0 ? (
           <div className="card p-10 text-center text-slate-500">{t('inbox.empty')}</div>

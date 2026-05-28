@@ -37,6 +37,8 @@ async function sendMessage(req, res) {
   const fingerprintRaw = req.body.fingerprint ? String(req.body.fingerprint).trim() : '';
   // FingerprintJS visitorIds are 20-char hex; accept up to 128 chars for safety.
   const fingerprint = fingerprintRaw.length > 0 && fingerprintRaw.length <= 128 ? fingerprintRaw : null;
+  const isPublic = req.body.is_public === true || req.body.is_public === 'true';
+  const saveToSent = req.body.save_to_sent === true || req.body.save_to_sent === 'true';
 
   if (!body) return res.status(400).json({ error: 'empty_message' });
   if (body.length > MAX_BODY) return res.status(400).json({ error: 'too_long' });
@@ -77,8 +79,9 @@ async function sendMessage(req, res) {
       `INSERT INTO messages
          (recipient_id, sender_id, body,
           sender_email, sender_name, sender_picture, sender_google_sub,
-          sender_ip, sender_user_agent, sender_fingerprint)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          sender_ip, sender_user_agent, sender_fingerprint,
+          is_public, save_to_sent)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING id, created_at`,
       [
         recipient.id,
@@ -91,6 +94,8 @@ async function sendMessage(req, res) {
         ip,
         ua,
         fingerprint,
+        isPublic,
+        saveToSent && !!req.userId,
       ]
     );
     res.status(201).json({ message: rows[0] });
@@ -103,26 +108,53 @@ async function sendMessage(req, res) {
 async function listInbox(req, res) {
   try {
     const filter = String(req.query.filter || 'all');
-    const params = [req.userId];
-    let where = `recipient_id = $1 AND is_hidden = FALSE`;
-    if (filter === 'unread') where += ` AND is_read = FALSE`;
-    if (filter === 'favorite') where += ` AND is_favorite = TRUE`;
+    let rows;
 
-    const { rows } = await pool.query(
-      `SELECT id, body, is_read, is_favorite, created_at
-       FROM messages
-       WHERE ${where}
-       ORDER BY created_at DESC
-       LIMIT 200`,
-      params
-    );
+    if (filter === 'sent') {
+      const r = await pool.query(
+        `SELECT id, body, is_read, is_favorite, is_public, created_at
+         FROM messages
+         WHERE sender_id = $1 AND save_to_sent = TRUE
+         ORDER BY created_at DESC
+         LIMIT 200`,
+        [req.userId]
+      );
+      rows = r.rows;
+    } else if (filter === 'public') {
+      const r = await pool.query(
+        `SELECT id, body, is_read, is_favorite, is_public, created_at
+         FROM messages
+         WHERE recipient_id = $1 AND is_hidden = FALSE AND is_public = TRUE
+         ORDER BY created_at DESC
+         LIMIT 200`,
+        [req.userId]
+      );
+      rows = r.rows;
+    } else {
+      const params = [req.userId];
+      let where = `recipient_id = $1 AND is_hidden = FALSE`;
+      if (filter === 'unread') where += ` AND is_read = FALSE`;
+      if (filter === 'favorite') where += ` AND is_favorite = TRUE`;
+
+      const r = await pool.query(
+        `SELECT id, body, is_read, is_favorite, is_public, created_at
+         FROM messages
+         WHERE ${where}
+         ORDER BY created_at DESC
+         LIMIT 200`,
+        params
+      );
+      rows = r.rows;
+    }
 
     const { rows: counts } = await pool.query(
       `SELECT
-         COUNT(*)::int AS total,
-         COUNT(*) FILTER (WHERE is_read = FALSE)::int AS unread,
-         COUNT(*) FILTER (WHERE is_favorite = TRUE)::int AS favorite
-       FROM messages WHERE recipient_id = $1 AND is_hidden = FALSE`,
+         COUNT(*) FILTER (WHERE recipient_id = $1 AND is_hidden = FALSE)::int AS total,
+         COUNT(*) FILTER (WHERE recipient_id = $1 AND is_hidden = FALSE AND is_read = FALSE)::int AS unread,
+         COUNT(*) FILTER (WHERE recipient_id = $1 AND is_hidden = FALSE AND is_favorite = TRUE)::int AS favorite,
+         COUNT(*) FILTER (WHERE recipient_id = $1 AND is_hidden = FALSE AND is_public = TRUE)::int AS public,
+         COUNT(*) FILTER (WHERE sender_id = $1 AND save_to_sent = TRUE)::int AS sent
+       FROM messages`,
       [req.userId]
     );
 

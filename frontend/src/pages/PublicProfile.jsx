@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
@@ -10,7 +10,6 @@ import { profileUrl } from '../lib/host';
 
 const MAX = 1000;
 
-// Lazy-load FingerprintJS once per page lifetime.
 let fpAgentPromise = null;
 function getFpAgent() {
   if (!fpAgentPromise) fpAgentPromise = FingerprintJS.load();
@@ -27,6 +26,22 @@ function decodeJwtPayload(jwt) {
   }
 }
 
+function relativeTime(iso, t) {
+  const diff = Math.max(0, Date.now() - new Date(iso).getTime());
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return t('time.justNow');
+  if (m < 60) return t('time.minutesAgo', { n: m });
+  const h = Math.floor(m / 60);
+  if (h < 24) return t('time.hoursAgo', { n: h });
+  const d = Math.floor(h / 24);
+  if (d < 7) return t('time.daysAgo', { n: d });
+  const w = Math.floor(d / 7);
+  if (w < 5) return t('time.weeksAgo', { n: w });
+  const mo = Math.floor(d / 30);
+  if (mo < 12) return t('time.monthsAgo', { n: mo });
+  return t('time.yearsAgo', { n: Math.floor(d / 365) });
+}
+
 export default function PublicProfile({ usernameOverride }) {
   const { t, i18n } = useTranslation();
   const params = useParams();
@@ -34,17 +49,21 @@ export default function PublicProfile({ usernameOverride }) {
   const user = useAuth((s) => s.user);
 
   const [profile, setProfile] = useState(null);
-  const [state, setState] = useState('loading'); // loading | ok | not_found
+  const [state, setState] = useState('loading');
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
   const [googleIdToken, setGoogleIdToken] = useState('');
-  const [googleProfile, setGoogleProfile] = useState(null); // { name, picture, email }
+  const [googleProfile, setGoogleProfile] = useState(null);
+  const [isPrivate, setIsPrivate] = useState(true);
+  const [saveToSent, setSaveToSent] = useState(true);
+  const [publicMessages, setPublicMessages] = useState([]);
   const fingerprintRef = useRef('');
 
   useEffect(() => {
     let alive = true;
     setState('loading');
-    api.get(`/users/u/${encodeURIComponent(username)}`)
+    api
+      .get(`/users/u/${encodeURIComponent(username)}`)
       .then(({ data }) => {
         if (!alive) return;
         setProfile(data.user);
@@ -54,11 +73,26 @@ export default function PublicProfile({ usernameOverride }) {
         if (!alive) return;
         setState('not_found');
       });
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [username]);
 
-  // Pre-compute device fingerprint silently as soon as the page mounts.
-  // Failure is non-fatal; we still let the user send.
+  useEffect(() => {
+    if (state !== 'ok' || !profile) return;
+    let alive = true;
+    api
+      .get(`/users/u/${encodeURIComponent(username)}/public-messages`)
+      .then(({ data }) => {
+        if (!alive) return;
+        setPublicMessages(data.messages || []);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [state, profile, username]);
+
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -70,8 +104,17 @@ export default function PublicProfile({ usernameOverride }) {
         /* ignore */
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, []);
+
+  const suggestRandom = () => {
+    const list = t('profile.suggestions', { returnObjects: true });
+    if (!Array.isArray(list) || list.length === 0) return;
+    const pick = list[Math.floor(Math.random() * list.length)];
+    setBody((b) => (b && !b.endsWith(' ') ? `${b} ${pick}` : pick));
+  };
 
   const send = async (e) => {
     e.preventDefault();
@@ -82,12 +125,22 @@ export default function PublicProfile({ usernameOverride }) {
     }
     setBusy(true);
     try {
-      const payload = { body };
+      const payload = {
+        body,
+        is_public: !isPrivate,
+        save_to_sent: !!user && saveToSent,
+      };
       if (!user && googleIdToken) payload.google_id_token = googleIdToken;
       if (fingerprintRef.current) payload.fingerprint = fingerprintRef.current;
       await api.post(`/messages/to/${encodeURIComponent(username)}`, payload);
       setBody('');
       toast.success(t('profile.sent'));
+      if (!isPrivate) {
+        api
+          .get(`/users/u/${encodeURIComponent(username)}/public-messages`)
+          .then(({ data }) => setPublicMessages(data.messages || []))
+          .catch(() => {});
+      }
     } catch (err) {
       const code = err.response?.data?.error || 'server_error';
       toast.error(t(`errors.${code}`, { defaultValue: t('errors.server_error') }));
@@ -109,13 +162,16 @@ export default function PublicProfile({ usernameOverride }) {
   };
 
   const onGoogleError = () => {
-    toast.error(t('profile.googleFailed', { defaultValue: 'Google sign-in failed. Please try again.' }));
+    toast.error(t('profile.googleFailed', { defaultValue: 'Google sign-in failed.' }));
   };
 
   const signOutGoogle = () => {
     setGoogleIdToken('');
     setGoogleProfile(null);
   };
+
+  const remaining = MAX - body.length;
+  const isSelf = user && profile && user.id === profile.id;
 
   if (state === 'loading') {
     return <div className="py-24 text-center text-slate-500">{t('common.loading')}</div>;
@@ -132,100 +188,294 @@ export default function PublicProfile({ usernameOverride }) {
     );
   }
 
-  const joined = new Date(profile.created_at).toLocaleDateString(
-    i18n.language === 'ar' ? 'ar-EG' : 'en-US',
-    { year: 'numeric', month: 'long' }
-  );
-
-  const remaining = MAX - body.length;
-  const isSelf = user && user.id === profile.id;
+  const displayName = profile.display_name || profile.username;
+  const link = profileUrl(profile);
 
   return (
-    <div className="max-w-md mx-auto px-4 py-10">
-      <div className="card p-6 text-center">
-        <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-brand-400 to-brand-700 grid place-items-center text-white text-3xl font-extrabold">
-          {(profile.display_name || profile.username).charAt(0).toUpperCase()}
+    <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8">
+      <div className="card overflow-hidden">
+        <div className="h-1.5 bg-gradient-to-r from-brand-400 to-brand-600" />
+        <div className="px-5 sm:px-8 pt-7 pb-5 text-center">
+          <div className="relative mx-auto w-28 h-28 sm:w-32 sm:h-32">
+            <div className="w-full h-full rounded-full overflow-hidden ring-4 ring-white shadow-md bg-gradient-to-br from-brand-400 to-brand-700 grid place-items-center text-white text-4xl font-extrabold">
+              {profile.avatar_url ? (
+                <img src={profile.avatar_url} alt={displayName} className="w-full h-full object-cover" />
+              ) : (
+                <span>{displayName.charAt(0).toUpperCase()}</span>
+              )}
+            </div>
+            {profile.is_online && (
+              <span
+                className="absolute bottom-1 end-1 w-5 h-5 rounded-full bg-green-500 ring-4 ring-white"
+                title={t('profile.online')}
+                aria-label={t('profile.online')}
+              />
+            )}
+          </div>
+
+          <h1 className="mt-4 text-2xl font-extrabold text-ink">{displayName}</h1>
+          <a
+            href={link}
+            className="mt-1 inline-block text-sm text-ink underline underline-offset-2 decoration-ink/40 hover:decoration-ink break-all"
+            dir="ltr"
+          >
+            {link}
+          </a>
+
+          <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
+                profile.is_online ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${profile.is_online ? 'bg-green-500' : 'bg-slate-400'}`}
+                aria-hidden
+              />
+              {profile.is_online ? t('profile.online') : t('profile.offline')}
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-brand-50 text-brand-700 px-3 py-1 text-xs font-semibold">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              {t('profile.visitors')}: {profile.visit_count || 0}
+            </span>
+          </div>
+
+          <div className="mt-5 grid grid-cols-3 gap-2 sm:gap-4">
+            <div className="text-center">
+              <div className="text-xs sm:text-sm text-ink-muted">{t('inbox.statFollowing')}</div>
+              <div className="mt-1 text-lg sm:text-xl font-extrabold text-ink">0</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xs sm:text-sm text-ink-muted">{t('inbox.statFollowers')}</div>
+              <div className="mt-1 text-lg sm:text-xl font-extrabold text-ink">0</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xs sm:text-sm text-ink-muted">{t('inbox.statPosts')}</div>
+              <div className="mt-1 text-lg sm:text-xl font-extrabold text-ink">{publicMessages.length}</div>
+            </div>
+          </div>
+
+          {isSelf && (
+            <div className="mt-5">
+              <Link
+                to="/settings"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-50 text-brand-700 font-semibold py-2.5 px-5 text-sm hover:bg-brand-100 transition w-full"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4z" />
+                </svg>
+                {t('profile.editProfile')}
+              </Link>
+            </div>
+          )}
+
+          {profile.bio && <p className="mt-4 text-slate-700 text-sm leading-relaxed">{profile.bio}</p>}
         </div>
-        <h1 className="mt-4 text-xl font-extrabold text-slate-900">
-          {profile.display_name || profile.username}
-        </h1>
-        <div className="text-slate-500 text-sm" dir="ltr">@{profile.username}</div>
-        {profile.bio && <p className="mt-3 text-slate-700 text-sm leading-relaxed">{profile.bio}</p>}
-        <div className="mt-2 text-xs text-slate-400">{t('profile.joined')} {joined}</div>
       </div>
 
       {!profile.allow_messages ? (
-        <div className="card mt-5 p-6 text-center text-slate-600">
-          {t('profile.disabled')}
-        </div>
-      ) : isSelf ? (
-        <div className="card mt-5 p-6 text-center">
-          <p className="text-slate-600 text-sm">{t('inbox.yourLink')}</p>
-          <code className="mt-2 inline-block bg-slate-100 px-3 py-1.5 rounded-lg text-ink font-semibold" dir="ltr">
-            {profileUrl(profile)}
-          </code>
-          <div className="mt-4">
-            <Link to="/inbox" className="btn-primary">{t('nav.inbox')}</Link>
-          </div>
-        </div>
-      ) : !user && !googleIdToken ? (
-        <div className="card mt-5 p-6 text-center">
-          <p className="text-slate-700 text-sm mb-3">
-            {t('profile.sendMessageTo')}{' '}
-            <span className="font-bold text-brand-700" dir="ltr">@{profile.username}</span>
-          </p>
-          <p className="text-xs text-slate-500 mb-4">
-            {t('profile.signInRequired', {
-              defaultValue:
-                'Sign in with Google to send. The recipient never sees who you are — but admins can review for safety.',
-            })}
-          </p>
-          <div className="flex justify-center">
-            <GoogleLogin
-              onSuccess={onGoogleSuccess}
-              onError={onGoogleError}
-              theme="filled_blue"
-              shape="pill"
-              text="signin_with"
-              useOneTap={false}
-            />
-          </div>
-        </div>
+        <div className="card mt-5 p-6 text-center text-slate-600">{t('profile.disabled')}</div>
       ) : (
-        <form onSubmit={send} className="card mt-5 p-6">
-          {googleProfile && (
-            <div className="mb-3 flex items-center gap-2 text-xs text-slate-500 bg-slate-50 rounded-lg p-2">
-              {googleProfile.picture && (
-                <img src={googleProfile.picture} alt="" className="w-6 h-6 rounded-full" />
-              )}
-              <span className="flex-1 truncate" dir="ltr">{googleProfile.email}</span>
-              <button
-                type="button"
-                onClick={signOutGoogle}
-                className="text-brand-700 font-semibold hover:underline"
-              >
-                {t('profile.signOut', { defaultValue: 'Sign out' })}
-              </button>
+        <form onSubmit={send} className="card mt-5 p-5 sm:p-6">
+          {!user && !googleIdToken ? (
+            <div className="text-center py-2">
+              <p className="text-sm text-slate-700 mb-3">
+                {t('profile.sendMessageTo')}{' '}
+                <span className="font-bold text-brand-700" dir="ltr">@{profile.username}</span>
+              </p>
+              <p className="text-xs text-slate-500 mb-4">
+                {t('profile.signInRequired', {
+                  defaultValue:
+                    'Sign in with Google to send. The recipient never sees who you are — but admins can review for safety.',
+                })}
+              </p>
+              <div className="flex justify-center">
+                <GoogleLogin
+                  onSuccess={onGoogleSuccess}
+                  onError={onGoogleError}
+                  theme="filled_blue"
+                  shape="pill"
+                  text="signin_with"
+                  useOneTap={false}
+                />
+              </div>
             </div>
+          ) : (
+            <>
+              <div className="flex items-start gap-3">
+                <div className="shrink-0 w-9 h-9 rounded-full bg-slate-100 grid place-items-center text-slate-400">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3.5 20a7.5 7.5 0 0 1 17 0" />
+                    <circle cx="12" cy="8" r="4.5" />
+                  </svg>
+                </div>
+                <textarea
+                  className="input flex-1 min-h-[110px] resize-y border-0 bg-slate-50 focus:bg-white"
+                  placeholder={t('profile.placeholder')}
+                  value={body}
+                  onChange={(e) => setBody(e.target.value.slice(0, MAX))}
+                  maxLength={MAX}
+                  required
+                />
+              </div>
+
+              <div className="mt-3 space-y-2">
+                <label className="flex items-center justify-between gap-3 cursor-pointer">
+                  <span className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="4" y="11" width="16" height="10" rx="2" />
+                      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                    </svg>
+                    {t('profile.privateToggle')}
+                  </span>
+                  <span
+                    className={`relative inline-block w-10 h-6 rounded-full transition-colors ${
+                      isPrivate ? 'bg-brand-500' : 'bg-slate-300'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={isPrivate}
+                      onChange={(e) => setIsPrivate(e.target.checked)}
+                    />
+                    <span
+                      className={`absolute top-0.5 ${isPrivate ? 'end-0.5' : 'start-0.5'} w-5 h-5 rounded-full bg-white shadow transition-all`}
+                    />
+                  </span>
+                </label>
+
+                {user && (
+                  <label className="flex items-center justify-between gap-3 cursor-pointer">
+                    <span className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                        <path d="M17 21v-8H7v8M7 3v5h8" />
+                      </svg>
+                      {t('profile.saveToSent')}
+                    </span>
+                    <span
+                      className={`relative inline-block w-10 h-6 rounded-full transition-colors ${
+                        saveToSent ? 'bg-brand-500' : 'bg-slate-300'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={saveToSent}
+                        onChange={(e) => setSaveToSent(e.target.checked)}
+                      />
+                      <span
+                        className={`absolute top-0.5 ${saveToSent ? 'end-0.5' : 'start-0.5'} w-5 h-5 rounded-full bg-white shadow transition-all`}
+                      />
+                    </span>
+                  </label>
+                )}
+              </div>
+
+              <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+                <button
+                  type="button"
+                  onClick={suggestRandom}
+                  className="inline-flex items-center gap-1 text-brand-700 font-semibold hover:underline"
+                  title={t('profile.suggest')}
+                >
+                  🎲 <span>{t('profile.suggest')}</span>
+                </button>
+                <span>
+                  {t('profile.remaining')}: {remaining}
+                </span>
+              </div>
+
+              {googleProfile && (
+                <div className="mt-3 flex items-center gap-2 text-xs text-slate-500 bg-slate-50 rounded-lg p-2">
+                  {googleProfile.picture && (
+                    <img src={googleProfile.picture} alt="" className="w-6 h-6 rounded-full" />
+                  )}
+                  <span className="flex-1 truncate" dir="ltr">{googleProfile.email}</span>
+                  <button
+                    type="button"
+                    onClick={signOutGoogle}
+                    className="text-brand-700 font-semibold hover:underline"
+                  >
+                    {t('profile.signOut', { defaultValue: 'Sign out' })}
+                  </button>
+                </div>
+              )}
+
+              <div className="mt-4">
+                <button
+                  type="submit"
+                  disabled={busy || !body.trim()}
+                  className="w-full rounded-xl bg-brand-500 text-white font-bold py-3 hover:bg-brand-600 disabled:opacity-60 transition"
+                >
+                  {busy ? t('common.loading') : t('profile.send')}
+                </button>
+              </div>
+            </>
           )}
-          <label className="block text-sm font-semibold text-slate-700 mb-2">
-            {t('profile.sendMessageTo')} <span className="text-brand-700" dir="ltr">@{profile.username}</span>
-          </label>
-          <textarea
-            className="input min-h-[140px]"
-            placeholder={t('profile.placeholder')}
-            value={body}
-            onChange={(e) => setBody(e.target.value.slice(0, MAX))}
-            maxLength={MAX}
-            required
-          />
-          <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-            <span>{remaining} {t('profile.remaining')}</span>
-            <button type="submit" disabled={busy || !body.trim()} className="btn-primary text-sm disabled:opacity-60">
-              {busy ? t('common.loading') : t('profile.send')}
-            </button>
-          </div>
         </form>
+      )}
+
+      <div className="mt-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-bold text-slate-700">{t('profile.publicMessages')}</h2>
+        </div>
+        <div className="space-y-3">
+          {publicMessages.length === 0 ? (
+            <div className="card p-8 text-center text-slate-500 text-sm">
+              {t('profile.noPublicMessages')}
+            </div>
+          ) : (
+            publicMessages.map((m) => (
+              <article key={m.id} className="card p-4 sm:p-5">
+                <div className="flex items-start gap-3">
+                  <div className="shrink-0 w-9 h-9 rounded-full bg-brand-50 grid place-items-center text-brand-600">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3.5 20a7.5 7.5 0 0 1 17 0" />
+                      <circle cx="12" cy="8" r="4.5" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-ink-muted">
+                      <span className="font-semibold text-slate-700">{t('inbox.anonymous')}</span>
+                      <span className="mx-1 text-slate-400">•</span>
+                      <span>{relativeTime(m.created_at, t)}</span>
+                    </div>
+                    <p className="mt-2 text-slate-800 whitespace-pre-wrap leading-relaxed break-words">
+                      {m.body}
+                    </p>
+                  </div>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
+      </div>
+
+      {!user && (
+        <div className="card mt-6 p-6 text-center">
+          <div className="text-5xl">👋</div>
+          <h3 className="mt-3 text-xl font-extrabold text-ink">{t('profile.joinTitle')}</h3>
+          <p className="mt-2 text-sm text-slate-600">{t('profile.joinBody')}</p>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <Link
+              to="/register"
+              className="rounded-xl bg-orange-500 text-white font-bold py-2.5 hover:bg-orange-600 transition"
+            >
+              {t('profile.joinSignup')}
+            </Link>
+            <Link
+              to="/login"
+              className="rounded-xl bg-brand-500 text-white font-bold py-2.5 hover:bg-brand-600 transition"
+            >
+              {t('profile.joinLogin')}
+            </Link>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -2,18 +2,28 @@ const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 const { emailHandle, IDENTIFIER_SQL, IDENTIFIER_ORDER } = require('../utils/identifier');
 
+const ONLINE_WINDOW_SQL = `(last_seen IS NOT NULL AND last_seen > NOW() - INTERVAL '5 minutes')`;
+
 async function getPublicProfile(req, res) {
   const identifier = String(req.params.username || '').trim();
   if (!identifier) return res.status(400).json({ error: 'bad_username' });
 
   try {
     const { rows } = await pool.query(
-      `SELECT id, username, email, display_name, bio, avatar_url, allow_messages, is_banned, created_at
+      `SELECT id, username, email, display_name, bio, avatar_url, allow_messages, is_banned, created_at, visit_count,
+              ${ONLINE_WINDOW_SQL} AS is_online
        FROM users WHERE ${IDENTIFIER_SQL} ${IDENTIFIER_ORDER}`,
       [identifier]
     );
     const user = rows[0];
     if (!user || user.is_banned) return res.status(404).json({ error: 'user_not_found' });
+
+    // Increment visit count when the viewer is not the owner
+    if (!req.userId || req.userId !== user.id) {
+      pool.query(`UPDATE users SET visit_count = visit_count + 1 WHERE id = $1`, [user.id]).catch(() => {});
+      user.visit_count = (user.visit_count || 0) + 1;
+    }
+
     user.handle = emailHandle(user.email);
     delete user.email;
     delete user.is_banned;
@@ -102,4 +112,30 @@ async function deleteAccount(req, res) {
   }
 }
 
-module.exports = { getPublicProfile, updateProfile, changePassword, deleteAccount };
+async function getPublicMessages(req, res) {
+  const identifier = String(req.params.username || '').trim();
+  if (!identifier) return res.status(400).json({ error: 'bad_username' });
+  try {
+    const { rows: userRows } = await pool.query(
+      `SELECT id FROM users WHERE ${IDENTIFIER_SQL} AND is_banned = FALSE ${IDENTIFIER_ORDER}`,
+      [identifier]
+    );
+    const u = userRows[0];
+    if (!u) return res.status(404).json({ error: 'user_not_found' });
+
+    const { rows } = await pool.query(
+      `SELECT id, body, created_at
+       FROM messages
+       WHERE recipient_id = $1 AND is_public = TRUE AND is_hidden = FALSE
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      [u.id]
+    );
+    res.json({ messages: rows });
+  } catch (err) {
+    console.error('[users/publicMessages]', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+}
+
+module.exports = { getPublicProfile, getPublicMessages, updateProfile, changePassword, deleteAccount };

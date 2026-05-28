@@ -1,6 +1,6 @@
 const pool = require('./db');
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 async function ensureSchemaVersionTable() {
   await pool.query(`
@@ -91,6 +91,22 @@ async function applyAll() {
       banned_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
       reason TEXT
     )
+  `);
+
+  // v5 — presence + visit counter + public/private messages + sender saved copy
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS visit_count INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS save_to_sent BOOLEAN NOT NULL DEFAULT FALSE`);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_messages_recipient_public_created
+      ON messages (recipient_id, created_at DESC)
+      WHERE is_public = TRUE AND is_hidden = FALSE
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_messages_sender_saved_created
+      ON messages (sender_id, created_at DESC)
+      WHERE save_to_sent = TRUE
   `);
 }
 
