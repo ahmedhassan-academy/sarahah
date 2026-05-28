@@ -11,9 +11,35 @@ const adminRoutes = require('./routes/admin');
 
 const app = express();
 
+const allowList = (process.env.CLIENT_URL || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (allowList.length === 0) return true;
+  if (allowList.includes(origin)) return true;
+  // Allow any subdomain of any allowed root host (e.g. *.saraha.pro)
+  try {
+    const { hostname, protocol } = new URL(origin);
+    return allowList.some((allowed) => {
+      try {
+        const a = new URL(allowed);
+        if (a.protocol !== protocol) return false;
+        return hostname === a.hostname || hostname.endsWith(`.${a.hostname}`);
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL ? process.env.CLIENT_URL.split(',') : '*',
+    origin: (origin, cb) => cb(null, isAllowedOrigin(origin)),
     credentials: true,
   })
 );
