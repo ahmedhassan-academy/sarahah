@@ -1,6 +1,12 @@
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
 const { sign } = require('../utils/jwt');
+const { emailHandle } = require('../utils/identifier');
+
+function withHandle(user) {
+  if (!user) return user;
+  return { ...user, handle: emailHandle(user.email) };
+}
 
 const USERNAME_RE = /^[a-zA-Z0-9_]{3,20}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -34,7 +40,7 @@ async function register(req, res) {
        RETURNING id, username, email, display_name, bio, avatar_url, allow_messages, is_admin, is_banned, created_at`,
       [username, email, hash, display_name]
     );
-    const user = rows[0];
+    const user = withHandle(rows[0]);
     const token = sign({ uid: user.id });
     res.status(201).json({ token, user });
   } catch (err) {
@@ -73,7 +79,7 @@ async function login(req, res) {
 
     delete user.password_hash;
     const token = sign({ uid: user.id });
-    res.json({ token, user });
+    res.json({ token, user: withHandle(user) });
   } catch (err) {
     console.error('[auth/login]', err);
     res.status(500).json({ error: 'server_error' });
@@ -88,7 +94,7 @@ async function me(req, res) {
       [req.userId]
     );
     if (!rows[0]) return res.status(404).json({ error: 'not_found' });
-    res.json({ user: rows[0] });
+    res.json({ user: withHandle(rows[0]) });
   } catch (err) {
     console.error('[auth/me]', err);
     res.status(500).json({ error: 'server_error' });

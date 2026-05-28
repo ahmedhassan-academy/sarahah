@@ -83,7 +83,7 @@ export default function Inbox() {
     }
   };
 
-  const link = profileUrl(user?.username);
+  const link = profileUrl(user);
   const displayName = user?.display_name || user?.username || '';
   const avatar = user?.avatar_url;
 
@@ -118,7 +118,7 @@ export default function Inbox() {
           <h1 className="mt-4 text-2xl font-extrabold text-ink">{displayName}</h1>
           <button
             onClick={() => setShareOpen(true)}
-            className="mt-1 text-sm text-brand-700 hover:underline break-all"
+            className="mt-1 text-sm text-ink hover:underline break-all"
             dir="ltr"
           >
             {link}

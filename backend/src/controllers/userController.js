@@ -1,18 +1,21 @@
 const bcrypt = require('bcryptjs');
 const pool = require('../config/db');
+const { emailHandle, IDENTIFIER_SQL, IDENTIFIER_ORDER } = require('../utils/identifier');
 
 async function getPublicProfile(req, res) {
-  const username = String(req.params.username || '').trim();
-  if (!username) return res.status(400).json({ error: 'bad_username' });
+  const identifier = String(req.params.username || '').trim();
+  if (!identifier) return res.status(400).json({ error: 'bad_username' });
 
   try {
     const { rows } = await pool.query(
-      `SELECT id, username, display_name, bio, avatar_url, allow_messages, is_banned, created_at
-       FROM users WHERE LOWER(username) = LOWER($1)`,
-      [username]
+      `SELECT id, username, email, display_name, bio, avatar_url, allow_messages, is_banned, created_at
+       FROM users WHERE ${IDENTIFIER_SQL} ${IDENTIFIER_ORDER}`,
+      [identifier]
     );
     const user = rows[0];
     if (!user || user.is_banned) return res.status(404).json({ error: 'user_not_found' });
+    user.handle = emailHandle(user.email);
+    delete user.email;
     delete user.is_banned;
     res.json({ user });
   } catch (err) {
@@ -59,7 +62,9 @@ async function updateProfile(req, res) {
        RETURNING id, username, email, display_name, bio, avatar_url, allow_messages, created_at`,
       params
     );
-    res.json({ user: rows[0] });
+    const u = rows[0];
+    if (u) u.handle = emailHandle(u.email);
+    res.json({ user: u });
   } catch (err) {
     console.error('[users/update]', err);
     res.status(500).json({ error: 'server_error' });

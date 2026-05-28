@@ -161,8 +161,8 @@ export default function PublicProfile({ usernameOverride }) {
       ) : isSelf ? (
         <div className="card mt-5 p-6 text-center">
           <p className="text-slate-600 text-sm">{t('inbox.yourLink')}</p>
-          <code className="mt-2 inline-block bg-slate-100 px-3 py-1.5 rounded-lg text-brand-700 font-semibold" dir="ltr">
-            {profileUrl(profile.username)}
+          <code className="mt-2 inline-block bg-slate-100 px-3 py-1.5 rounded-lg text-ink font-semibold" dir="ltr">
+            {profileUrl(profile)}
           </code>
           <div className="mt-4">
             <Link to="/inbox" className="btn-primary">{t('nav.inbox')}</Link>

@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { OAuth2Client } = require('google-auth-library');
+const { IDENTIFIER_SQL, IDENTIFIER_ORDER } = require('../utils/identifier');
 
 const MAX_BODY = 1000;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
@@ -61,7 +62,7 @@ async function sendMessage(req, res) {
     }
 
     const { rows: r } = await pool.query(
-      `SELECT id, allow_messages, is_banned FROM users WHERE LOWER(username) = LOWER($1)`,
+      `SELECT id, allow_messages, is_banned FROM users WHERE ${IDENTIFIER_SQL} ${IDENTIFIER_ORDER}`,
       [username]
     );
     const recipient = r[0];
