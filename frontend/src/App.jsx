@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
+import MinimalLayout from './components/MinimalLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import Landing from './pages/Landing';
@@ -15,10 +16,22 @@ import Privacy from './pages/Privacy';
 import Help from './pages/Help';
 import NotFound from './pages/NotFound';
 import { useAuth } from './store/auth';
+import { getSubdomainUsername } from './lib/host';
 
 export default function App() {
   const loadMe = useAuth((s) => s.loadMe);
   useEffect(() => { loadMe(); }, [loadMe]);
+
+  const subUsername = getSubdomainUsername();
+  if (subUsername) {
+    return (
+      <Routes>
+        <Route element={<MinimalLayout />}>
+          <Route path="*" element={<PublicProfile usernameOverride={subUsername} />} />
+        </Route>
+      </Routes>
+    );
+  }
 
   return (
     <Routes>

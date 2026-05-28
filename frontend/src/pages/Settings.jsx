@@ -1,9 +1,32 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import { useAuth } from '../store/auth';
+
+async function fileToCompressedDataUrl(file, maxSize = 320, quality = 0.82) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = reject;
+      i.src = url;
+    });
+    const ratio = Math.min(maxSize / img.width, maxSize / img.height, 1);
+    const w = Math.round(img.width * ratio);
+    const h = Math.round(img.height * ratio);
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    return canvas.toDataURL('image/jpeg', quality);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 export default function Settings() {
   const { t, i18n } = useTranslation();
@@ -17,6 +40,29 @@ export default function Settings() {
   const [avatar_url, setAvatar] = useState(user.avatar_url || '');
   const [allow_messages, setAllow] = useState(user.allow_messages);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const pickAvatar = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error(t('settings.avatarInvalid'));
+      return;
+    }
+    setUploadingAvatar(true);
+    try {
+      const dataUrl = await fileToCompressedDataUrl(file);
+      setAvatar(dataUrl);
+    } catch {
+      toast.error(t('settings.avatarFailed'));
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const clearAvatar = () => setAvatar('');
 
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -87,7 +133,42 @@ export default function Settings() {
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">
               {t('settings.avatar')}
             </label>
-            <input className="input" value={avatar_url} onChange={(e) => setAvatar(e.target.value)} placeholder="https://…" />
+            <div className="flex items-center gap-4">
+              <div className="shrink-0 w-20 h-20 rounded-full overflow-hidden bg-gradient-to-br from-brand-400 to-brand-700 grid place-items-center text-white text-2xl font-extrabold ring-2 ring-white shadow-sm">
+                {avatar_url ? (
+                  <img src={avatar_url} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <span>{(display_name || user.username).charAt(0).toUpperCase()}</span>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={pickAvatar}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                  className="btn-outline text-sm disabled:opacity-60"
+                >
+                  {uploadingAvatar ? t('common.loading') : t('settings.avatarUpload')}
+                </button>
+                {avatar_url && (
+                  <button
+                    type="button"
+                    onClick={clearAvatar}
+                    className="text-sm text-red-600 font-semibold hover:underline self-start"
+                  >
+                    {t('settings.avatarRemove')}
+                  </button>
+                )}
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-ink-muted">{t('settings.avatarHint')}</p>
           </div>
           <label className="flex items-center gap-3 cursor-pointer">
             <input

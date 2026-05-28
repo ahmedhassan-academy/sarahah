@@ -6,6 +6,7 @@ import { GoogleLogin } from '@react-oauth/google';
 import FingerprintJS from '@fingerprintjs/fingerprintjs';
 import api from '../api/client';
 import { useAuth } from '../store/auth';
+import { profileUrl } from '../lib/host';
 
 const MAX = 1000;
 
@@ -26,9 +27,10 @@ function decodeJwtPayload(jwt) {
   }
 }
 
-export default function PublicProfile() {
+export default function PublicProfile({ usernameOverride }) {
   const { t, i18n } = useTranslation();
-  const { username } = useParams();
+  const params = useParams();
+  const username = usernameOverride || params.username;
   const user = useAuth((s) => s.user);
 
   const [profile, setProfile] = useState(null);
@@ -159,8 +161,8 @@ export default function PublicProfile() {
       ) : isSelf ? (
         <div className="card mt-5 p-6 text-center">
           <p className="text-slate-600 text-sm">{t('inbox.yourLink')}</p>
-          <code className="mt-2 inline-block bg-slate-100 px-3 py-1.5 rounded-lg text-brand-700 font-semibold">
-            {window.location.origin}/{profile.username}
+          <code className="mt-2 inline-block bg-slate-100 px-3 py-1.5 rounded-lg text-brand-700 font-semibold" dir="ltr">
+            {profileUrl(profile.username)}
           </code>
           <div className="mt-4">
             <Link to="/inbox" className="btn-primary">{t('nav.inbox')}</Link>

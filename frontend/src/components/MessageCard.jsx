@@ -78,7 +78,7 @@ export default function MessageCard({ message, onFavorite, onDelete, onMarkRead 
             aria-label={message.is_favorite ? t('inbox.unfavorite') : t('inbox.favorite')}
             title={message.is_favorite ? t('inbox.unfavorite') : t('inbox.favorite')}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill={message.is_favorite ? '#10bbb3' : 'none'} stroke={message.is_favorite ? '#10bbb3' : '#64748b'} strokeWidth="2" strokeLinejoin="round">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill={message.is_favorite ? '#1ABC9C' : 'none'} stroke={message.is_favorite ? '#1ABC9C' : '#64748b'} strokeWidth="2" strokeLinejoin="round">
               <polygon points="12 2 15 9 22 9.3 17 14 18.5 21 12 17.3 5.5 21 7 14 2 9.3 9 9 12 2" />
             </svg>
           </button>

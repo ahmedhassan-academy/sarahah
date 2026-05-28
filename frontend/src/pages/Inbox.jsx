@@ -5,6 +5,7 @@ import api from '../api/client';
 import { useAuth } from '../store/auth';
 import MessageCard from '../components/MessageCard';
 import ShareSheet from '../components/ShareSheet';
+import { profileUrl } from '../lib/host';
 
 const TABS = ['inbox', 'sent', 'favorites', 'public'];
 
@@ -82,7 +83,7 @@ export default function Inbox() {
     }
   };
 
-  const link = `${window.location.origin}/${user?.username || ''}`;
+  const link = profileUrl(user?.username);
   const displayName = user?.display_name || user?.username || '';
   const avatar = user?.avatar_url;
 
@@ -136,7 +137,7 @@ export default function Inbox() {
             <button
               type="button"
               onClick={() => (window.location.href = '/help')}
-              className="col-span-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-accent-yellow text-amber-900 font-semibold py-2.5 text-sm hover:brightness-95 transition"
+              className="col-span-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-accent-yellow text-accent-yellowText font-semibold py-2.5 text-sm hover:brightness-95 transition"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" />
@@ -147,7 +148,7 @@ export default function Inbox() {
             <button
               type="button"
               onClick={() => setShareOpen(true)}
-              className="col-span-2 inline-flex items-center justify-center gap-2 rounded-xl bg-sky-100 text-sky-800 font-semibold py-2.5 text-sm hover:bg-sky-200 transition"
+              className="col-span-2 inline-flex items-center justify-center gap-2 rounded-xl bg-accent-blue text-accent-blueText font-semibold py-2.5 text-sm hover:brightness-95 transition"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="18" cy="5" r="3" />

@@ -29,7 +29,7 @@ async function updateProfile(req, res) {
   const allow_messages =
     req.body.allow_messages !== undefined ? Boolean(req.body.allow_messages) : undefined;
   const avatar_url =
-    req.body.avatar_url !== undefined ? String(req.body.avatar_url).trim().slice(0, 500) || null : undefined;
+    req.body.avatar_url !== undefined ? String(req.body.avatar_url).trim().slice(0, 200000) || null : undefined;
 
   const sets = [];
   const params = [];
