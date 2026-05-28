@@ -1,13 +1,47 @@
 const pool = require('../config/db');
+const { OAuth2Client } = require('google-auth-library');
 
 const MAX_BODY = 1000;
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const googleClient = GOOGLE_CLIENT_ID ? new OAuth2Client(GOOGLE_CLIENT_ID) : null;
+
+async function verifyGoogleIdToken(idToken) {
+  if (!googleClient || !idToken) return null;
+  try {
+    const ticket = await googleClient.verifyIdToken({ idToken, audience: GOOGLE_CLIENT_ID });
+    const p = ticket.getPayload();
+    if (!p || !p.email_verified) return null;
+    return {
+      sub: p.sub,
+      email: p.email,
+      name: p.name || null,
+      picture: p.picture || null,
+    };
+  } catch (err) {
+    console.warn('[messages/send] google token verify failed:', err.message);
+    return null;
+  }
+}
+
+function getClientIp(req) {
+  const fwd = req.headers['x-forwarded-for'];
+  if (fwd) return String(fwd).split(',')[0].trim();
+  return req.socket?.remoteAddress || null;
+}
 
 async function sendMessage(req, res) {
   const username = String(req.params.username || '').trim();
   const body = String(req.body.body || '').trim();
+  const googleIdToken = req.body.google_id_token ? String(req.body.google_id_token) : '';
 
   if (!body) return res.status(400).json({ error: 'empty_message' });
   if (body.length > MAX_BODY) return res.status(400).json({ error: 'too_long' });
+
+  let googleIdentity = null;
+  if (!req.userId) {
+    googleIdentity = await verifyGoogleIdToken(googleIdToken);
+    if (!googleIdentity) return res.status(401).json({ error: 'sender_identity_required' });
+  }
 
   try {
     if (req.userId) {
@@ -24,11 +58,27 @@ async function sendMessage(req, res) {
     if (!recipient.allow_messages) return res.status(403).json({ error: 'messages_disabled' });
     if (req.userId && recipient.id === req.userId) return res.status(400).json({ error: 'cannot_message_self' });
 
+    const ip = getClientIp(req);
+    const ua = req.headers['user-agent'] ? String(req.headers['user-agent']).slice(0, 500) : null;
+
     const { rows } = await pool.query(
-      `INSERT INTO messages (recipient_id, sender_id, body)
-       VALUES ($1, $2, $3)
+      `INSERT INTO messages
+         (recipient_id, sender_id, body,
+          sender_email, sender_name, sender_picture, sender_google_sub,
+          sender_ip, sender_user_agent)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id, created_at`,
-      [recipient.id, req.userId || null, body]
+      [
+        recipient.id,
+        req.userId || null,
+        body,
+        googleIdentity?.email || null,
+        googleIdentity?.name || null,
+        googleIdentity?.picture || null,
+        googleIdentity?.sub || null,
+        ip,
+        ua,
+      ]
     );
     res.status(201).json({ message: rows[0] });
   } catch (err) {

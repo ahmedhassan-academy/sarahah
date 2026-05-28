@@ -68,6 +68,8 @@ async function listMessages(req, res) {
       `SELECT
          m.id, m.body, m.is_read, m.is_favorite, m.is_hidden, m.created_at,
          m.sender_id, m.recipient_id,
+         m.sender_email, m.sender_name, m.sender_picture, m.sender_google_sub,
+         m.sender_ip, m.sender_user_agent,
          r.username AS recipient_username,
          s.username AS sender_username
        FROM messages m

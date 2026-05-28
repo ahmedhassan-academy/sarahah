@@ -2,10 +2,21 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
+import { GoogleLogin } from '@react-oauth/google';
 import api from '../api/client';
 import { useAuth } from '../store/auth';
 
 const MAX = 1000;
+
+function decodeJwtPayload(jwt) {
+  try {
+    const part = jwt.split('.')[1];
+    const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'));
+    return JSON.parse(decodeURIComponent(escape(json)));
+  } catch {
+    return null;
+  }
+}
 
 export default function PublicProfile() {
   const { t, i18n } = useTranslation();
@@ -16,6 +27,8 @@ export default function PublicProfile() {
   const [state, setState] = useState('loading'); // loading | ok | not_found
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
+  const [googleIdToken, setGoogleIdToken] = useState('');
+  const [googleProfile, setGoogleProfile] = useState(null); // { name, picture, email }
 
   useEffect(() => {
     let alive = true;
@@ -36,9 +49,15 @@ export default function PublicProfile() {
   const send = async (e) => {
     e.preventDefault();
     if (!body.trim()) return;
+    if (!user && !googleIdToken) {
+      toast.error(t('profile.signInFirst', { defaultValue: 'Please sign in with Google to send a message.' }));
+      return;
+    }
     setBusy(true);
     try {
-      await api.post(`/messages/to/${encodeURIComponent(username)}`, { body });
+      const payload = { body };
+      if (!user && googleIdToken) payload.google_id_token = googleIdToken;
+      await api.post(`/messages/to/${encodeURIComponent(username)}`, payload);
       setBody('');
       toast.success(t('profile.sent'));
     } catch (err) {
@@ -47,6 +66,27 @@ export default function PublicProfile() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const onGoogleSuccess = (credentialResponse) => {
+    const idToken = credentialResponse?.credential || '';
+    if (!idToken) return;
+    const payload = decodeJwtPayload(idToken);
+    setGoogleIdToken(idToken);
+    setGoogleProfile({
+      name: payload?.name || '',
+      picture: payload?.picture || '',
+      email: payload?.email || '',
+    });
+  };
+
+  const onGoogleError = () => {
+    toast.error(t('profile.googleFailed', { defaultValue: 'Google sign-in failed. Please try again.' }));
+  };
+
+  const signOutGoogle = () => {
+    setGoogleIdToken('');
+    setGoogleProfile(null);
   };
 
   if (state === 'loading') {
@@ -100,8 +140,46 @@ export default function PublicProfile() {
             <Link to="/inbox" className="btn-primary">{t('nav.inbox')}</Link>
           </div>
         </div>
+      ) : !user && !googleIdToken ? (
+        <div className="card mt-5 p-6 text-center">
+          <p className="text-slate-700 text-sm mb-3">
+            {t('profile.sendMessageTo')}{' '}
+            <span className="font-bold text-brand-700" dir="ltr">@{profile.username}</span>
+          </p>
+          <p className="text-xs text-slate-500 mb-4">
+            {t('profile.signInRequired', {
+              defaultValue:
+                'Sign in with Google to send. The recipient never sees who you are — but admins can review for safety.',
+            })}
+          </p>
+          <div className="flex justify-center">
+            <GoogleLogin
+              onSuccess={onGoogleSuccess}
+              onError={onGoogleError}
+              theme="filled_blue"
+              shape="pill"
+              text="signin_with"
+              useOneTap={false}
+            />
+          </div>
+        </div>
       ) : (
         <form onSubmit={send} className="card mt-5 p-6">
+          {googleProfile && (
+            <div className="mb-3 flex items-center gap-2 text-xs text-slate-500 bg-slate-50 rounded-lg p-2">
+              {googleProfile.picture && (
+                <img src={googleProfile.picture} alt="" className="w-6 h-6 rounded-full" />
+              )}
+              <span className="flex-1 truncate" dir="ltr">{googleProfile.email}</span>
+              <button
+                type="button"
+                onClick={signOutGoogle}
+                className="text-brand-700 font-semibold hover:underline"
+              >
+                {t('profile.signOut', { defaultValue: 'Sign out' })}
+              </button>
+            </div>
+          )}
           <label className="block text-sm font-semibold text-slate-700 mb-2">
             {t('profile.sendMessageTo')} <span className="text-brand-700" dir="ltr">@{profile.username}</span>
           </label>

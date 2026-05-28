@@ -1,6 +1,6 @@
 const pool = require('./db');
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 async function ensureSchemaVersionTable() {
   await pool.query(`
@@ -68,6 +68,14 @@ async function applyAll() {
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_banned BOOLEAN NOT NULL DEFAULT FALSE`);
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN NOT NULL DEFAULT FALSE`);
+
+  // v3 — verified anonymous senders (Google) + admin-only IP / UA capture
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_email TEXT`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_name TEXT`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_picture TEXT`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_google_sub TEXT`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_ip TEXT`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_user_agent TEXT`);
 }
 
 async function bootstrapAdmins() {

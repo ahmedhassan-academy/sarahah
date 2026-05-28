@@ -198,27 +198,50 @@ function MessagesTab() {
         <div className="text-center text-ink-muted py-10">{t('admin.noResults')}</div>
       ) : (
         <div className="space-y-2">
-          {messages.map((m) => (
-            <div key={m.id} className={`card p-4 ${m.is_hidden ? 'opacity-60' : ''}`}>
-              <div className="flex items-center justify-between gap-2 text-xs text-ink-muted">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span>{t('admin.sender')}: <b className="text-ink" dir="ltr">@{m.sender_username || '?'}</b></span>
-                  <span>→</span>
-                  <span>{t('admin.recipient')}: <b className="text-ink" dir="ltr">@{m.recipient_username}</b></span>
+          {messages.map((m) => {
+            const senderLabel = m.sender_username
+              ? `@${m.sender_username}`
+              : m.sender_email
+              ? m.sender_name
+                ? `${m.sender_name} (Google)`
+                : `${m.sender_email} (Google)`
+              : '?';
+            return (
+              <div key={m.id} className={`card p-4 ${m.is_hidden ? 'opacity-60' : ''}`}>
+                <div className="flex items-center justify-between gap-2 text-xs text-ink-muted">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {m.sender_picture && (
+                      <img src={m.sender_picture} alt="" className="w-5 h-5 rounded-full" />
+                    )}
+                    <span>{t('admin.sender')}: <b className="text-ink" dir="ltr">{senderLabel}</b></span>
+                    <span>→</span>
+                    <span>{t('admin.recipient')}: <b className="text-ink" dir="ltr">@{m.recipient_username}</b></span>
+                  </div>
+                  <span>{formatDate(m.created_at, i18n.language)}</span>
                 </div>
-                <span>{formatDate(m.created_at, i18n.language)}</span>
+                {(m.sender_email || m.sender_ip) && (
+                  <div className="mt-1 text-[11px] text-ink-muted flex flex-wrap gap-x-3 gap-y-1" dir="ltr">
+                    {m.sender_email && <span>email: {m.sender_email}</span>}
+                    {m.sender_ip && <span>ip: {m.sender_ip}</span>}
+                    {m.sender_user_agent && (
+                      <span className="truncate max-w-[260px]" title={m.sender_user_agent}>
+                        ua: {m.sender_user_agent}
+                      </span>
+                    )}
+                  </div>
+                )}
+                <p className="mt-2 text-ink whitespace-pre-wrap leading-relaxed">{m.body}</p>
+                <div className="mt-3 flex items-center gap-2">
+                  <button onClick={() => hideToggle(m.id)} className="btn-outline text-xs">
+                    {m.is_hidden ? t('admin.unhide') : t('admin.hide')}
+                  </button>
+                  <button onClick={() => remove(m.id)} className="btn text-xs bg-red-600 text-white hover:bg-red-700">
+                    {t('admin.deleteMsg')}
+                  </button>
+                </div>
               </div>
-              <p className="mt-2 text-ink whitespace-pre-wrap leading-relaxed">{m.body}</p>
-              <div className="mt-3 flex items-center gap-2">
-                <button onClick={() => hideToggle(m.id)} className="btn-outline text-xs">
-                  {m.is_hidden ? t('admin.unhide') : t('admin.hide')}
-                </button>
-                <button onClick={() => remove(m.id)} className="btn text-xs bg-red-600 text-white hover:bg-red-700">
-                  {t('admin.deleteMsg')}
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
