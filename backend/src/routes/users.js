@@ -6,12 +6,16 @@ const {
   updateProfile,
   changePassword,
   deleteAccount,
+  followUser,
+  unfollowUser,
 } = require('../controllers/userController');
 
 const router = express.Router();
 
 router.get('/u/:username', optionalAuth, getPublicProfile);
 router.get('/u/:username/public-messages', getPublicMessages);
+router.post('/u/:username/follow', optionalAuth, followUser);
+router.delete('/u/:username/follow', optionalAuth, unfollowUser);
 router.patch('/me', requireAuth, updateProfile);
 router.post('/me/password', requireAuth, changePassword);
 router.delete('/me', requireAuth, deleteAccount);

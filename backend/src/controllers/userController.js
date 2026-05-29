@@ -24,6 +24,32 @@ async function getPublicProfile(req, res) {
       user.visit_count = (user.visit_count || 0) + 1;
     }
 
+    // Follower / following counts
+    const { rows: counts } = await pool.query(
+      `SELECT
+         (SELECT COUNT(*) FROM follows WHERE followee_id = $1)::int AS followers,
+         (SELECT COUNT(*) FROM follows WHERE follower_user_id = $1)::int AS following`,
+      [user.id]
+    );
+    user.followers = counts[0].followers;
+    user.following = counts[0].following;
+
+    // Whether the current viewer (registered user or Google visitor) already follows
+    user.is_following = false;
+    if (req.userId) {
+      const r = await pool.query(
+        `SELECT 1 FROM follows WHERE followee_id = $1 AND follower_user_id = $2`,
+        [user.id, req.userId]
+      );
+      user.is_following = r.rowCount > 0;
+    } else if (req.googleVisitorId) {
+      const r = await pool.query(
+        `SELECT 1 FROM follows WHERE followee_id = $1 AND follower_visitor_id = $2`,
+        [user.id, req.googleVisitorId]
+      );
+      user.is_following = r.rowCount > 0;
+    }
+
     user.handle = emailHandle(user.email);
     delete user.email;
     delete user.is_banned;
@@ -138,4 +164,104 @@ async function getPublicMessages(req, res) {
   }
 }
 
-module.exports = { getPublicProfile, getPublicMessages, updateProfile, changePassword, deleteAccount };
+async function resolveFollower(req) {
+  // Returns { userId } or { visitorId }, or null if the viewer has no valid identity.
+  if (req.userId) {
+    const { rows } = await pool.query(`SELECT is_banned FROM users WHERE id = $1`, [req.userId]);
+    if (!rows[0]) return null;
+    if (rows[0].is_banned) return { banned: true };
+    return { userId: req.userId };
+  }
+  if (req.googleVisitorId) {
+    const { rows } = await pool.query(`SELECT is_banned FROM google_visitors WHERE id = $1`, [req.googleVisitorId]);
+    if (!rows[0]) return null;
+    if (rows[0].is_banned) return { banned: true };
+    return { visitorId: req.googleVisitorId };
+  }
+  return null;
+}
+
+async function followerCount(followeeId) {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS followers FROM follows WHERE followee_id = $1`,
+    [followeeId]
+  );
+  return rows[0].followers;
+}
+
+async function followUser(req, res) {
+  const identifier = String(req.params.username || '').trim();
+  if (!identifier) return res.status(400).json({ error: 'bad_username' });
+
+  try {
+    const follower = await resolveFollower(req);
+    if (!follower) return res.status(401).json({ error: 'sign_in_required' });
+    if (follower.banned) return res.status(403).json({ error: 'account_banned' });
+
+    const { rows } = await pool.query(
+      `SELECT id, is_banned FROM users WHERE ${IDENTIFIER_SQL} ${IDENTIFIER_ORDER}`,
+      [identifier]
+    );
+    const target = rows[0];
+    if (!target || target.is_banned) return res.status(404).json({ error: 'user_not_found' });
+    if (follower.userId && target.id === follower.userId) {
+      return res.status(400).json({ error: 'cannot_follow_self' });
+    }
+
+    await pool.query(
+      `INSERT INTO follows (followee_id, follower_user_id, follower_visitor_id)
+       VALUES ($1, $2, $3)
+       ON CONFLICT DO NOTHING`,
+      [target.id, follower.userId || null, follower.visitorId || null]
+    );
+
+    res.json({ is_following: true, followers: await followerCount(target.id) });
+  } catch (err) {
+    console.error('[users/follow]', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+}
+
+async function unfollowUser(req, res) {
+  const identifier = String(req.params.username || '').trim();
+  if (!identifier) return res.status(400).json({ error: 'bad_username' });
+
+  try {
+    const follower = await resolveFollower(req);
+    if (!follower) return res.status(401).json({ error: 'sign_in_required' });
+
+    const { rows } = await pool.query(
+      `SELECT id FROM users WHERE ${IDENTIFIER_SQL} ${IDENTIFIER_ORDER}`,
+      [identifier]
+    );
+    const target = rows[0];
+    if (!target) return res.status(404).json({ error: 'user_not_found' });
+
+    if (follower.userId) {
+      await pool.query(
+        `DELETE FROM follows WHERE followee_id = $1 AND follower_user_id = $2`,
+        [target.id, follower.userId]
+      );
+    } else if (follower.visitorId) {
+      await pool.query(
+        `DELETE FROM follows WHERE followee_id = $1 AND follower_visitor_id = $2`,
+        [target.id, follower.visitorId]
+      );
+    }
+
+    res.json({ is_following: false, followers: await followerCount(target.id) });
+  } catch (err) {
+    console.error('[users/unfollow]', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+}
+
+module.exports = {
+  getPublicProfile,
+  getPublicMessages,
+  updateProfile,
+  changePassword,
+  deleteAccount,
+  followUser,
+  unfollowUser,
+};

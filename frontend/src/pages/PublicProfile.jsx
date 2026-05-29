@@ -52,6 +52,10 @@ export default function PublicProfile() {
   const [isPrivate, setIsPrivate] = useState(true);
   const [saveToSent, setSaveToSent] = useState(true);
   const [publicMessages, setPublicMessages] = useState([]);
+  const [followers, setFollowers] = useState(0);
+  const [following, setFollowing] = useState(0);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followBusy, setFollowBusy] = useState(false);
   const fingerprintRef = useRef('');
 
   useEffect(() => {
@@ -62,6 +66,9 @@ export default function PublicProfile() {
       .then(({ data }) => {
         if (!alive) return;
         setProfile(data.user);
+        setFollowers(data.user.followers || 0);
+        setFollowing(data.user.following || 0);
+        setIsFollowing(!!data.user.is_following);
         setState('ok');
       })
       .catch(() => {
@@ -165,6 +172,39 @@ export default function PublicProfile() {
     }
   };
 
+  const toggleFollow = async () => {
+    if (!user && !googleProfile) {
+      toast.error(t('profile.signInToFollow'));
+      return;
+    }
+    if (followBusy) return;
+    const next = !isFollowing;
+    setFollowBusy(true);
+    // Optimistic update
+    setIsFollowing(next);
+    setFollowers((c) => Math.max(0, c + (next ? 1 : -1)));
+    try {
+      const { data } = next
+        ? await api.post(`/users/u/${encodeURIComponent(username)}/follow`)
+        : await api.delete(`/users/u/${encodeURIComponent(username)}/follow`);
+      setIsFollowing(!!data.is_following);
+      if (typeof data.followers === 'number') setFollowers(data.followers);
+    } catch (err) {
+      // Revert on failure
+      setIsFollowing(!next);
+      setFollowers((c) => Math.max(0, c + (next ? -1 : 1)));
+      if (err.response?.status === 401) {
+        setGoogleProfile(null);
+        toast.error(t('profile.signInToFollow'));
+      } else {
+        const code = err.response?.data?.error || 'server_error';
+        toast.error(t(`errors.${code}`, { defaultValue: t('errors.server_error') }));
+      }
+    } finally {
+      setFollowBusy(false);
+    }
+  };
+
   const onGoogleSuccess = async (cred) => {
     const idToken = cred?.credential || '';
     if (!idToken) return;
@@ -261,11 +301,11 @@ export default function PublicProfile() {
           <div className="mt-5 grid grid-cols-3 gap-2 sm:gap-4">
             <div className="text-center">
               <div className="text-xs sm:text-sm text-ink-muted">{t('inbox.statFollowing')}</div>
-              <div className="mt-1 text-lg sm:text-xl font-extrabold text-ink">0</div>
+              <div className="mt-1 text-lg sm:text-xl font-extrabold text-ink">{following}</div>
             </div>
             <div className="text-center">
               <div className="text-xs sm:text-sm text-ink-muted">{t('inbox.statFollowers')}</div>
-              <div className="mt-1 text-lg sm:text-xl font-extrabold text-ink">0</div>
+              <div className="mt-1 text-lg sm:text-xl font-extrabold text-ink">{followers}</div>
             </div>
             <div className="text-center">
               <div className="text-xs sm:text-sm text-ink-muted">{t('inbox.statPosts')}</div>
@@ -273,7 +313,7 @@ export default function PublicProfile() {
             </div>
           </div>
 
-          {isSelf && (
+          {isSelf ? (
             <div className="mt-5">
               <Link
                 to="/settings"
@@ -284,6 +324,21 @@ export default function PublicProfile() {
                 </svg>
                 {t('profile.editProfile')}
               </Link>
+            </div>
+          ) : (
+            <div className="mt-5">
+              <button
+                type="button"
+                onClick={toggleFollow}
+                disabled={followBusy}
+                className={
+                  isFollowing
+                    ? 'inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white text-slate-700 font-bold py-3 px-5 w-full transition hover:bg-slate-50 disabled:opacity-60'
+                    : 'inline-flex items-center justify-center gap-2 rounded-full bg-[#F26C7B] text-white font-bold py-3 px-5 w-full transition hover:bg-[#ee586b] disabled:opacity-60'
+                }
+              >
+                {isFollowing ? t('profile.unfollow') : t('profile.follow')}
+              </button>
             </div>
           )}
 

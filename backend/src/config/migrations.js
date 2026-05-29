@@ -1,6 +1,6 @@
 const pool = require('./db');
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 async function ensureSchemaVersionTable() {
   await pool.query(`
@@ -123,6 +123,36 @@ async function applyAll() {
       banned_at TIMESTAMPTZ,
       banned_by INTEGER REFERENCES users(id) ON DELETE SET NULL
     )
+  `);
+
+  // v7 — followers (a follower is either a registered user or a Google visitor)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS follows (
+      id SERIAL PRIMARY KEY,
+      followee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      follower_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      follower_visitor_id INTEGER REFERENCES google_visitors(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT follows_one_follower CHECK (
+        (follower_user_id IS NOT NULL AND follower_visitor_id IS NULL) OR
+        (follower_user_id IS NULL AND follower_visitor_id IS NOT NULL)
+      )
+    )
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_follows_user
+      ON follows (followee_id, follower_user_id)
+      WHERE follower_user_id IS NOT NULL
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_follows_visitor
+      ON follows (followee_id, follower_visitor_id)
+      WHERE follower_visitor_id IS NOT NULL
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_follows_follower_user
+      ON follows (follower_user_id)
+      WHERE follower_user_id IS NOT NULL
   `);
 }
 
