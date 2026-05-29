@@ -46,7 +46,7 @@ export default function MessageCard({ message, onFavorite, onDelete, onMarkRead 
       }`}
     >
       <div className="flex items-start gap-3">
-        <div className="shrink-0 w-10 h-10 rounded-full bg-brand-50 grid place-items-center overflow-hidden">
+        <div className="shrink-0 w-10 h-10 rounded-full bg-brand-100 grid place-items-center overflow-hidden">
           <img src="/logo.png" alt="" className="w-7 h-7 object-contain" />
         </div>
 
@@ -116,7 +116,7 @@ export default function MessageCard({ message, onFavorite, onDelete, onMarkRead 
         </div>
       </div>
 
-      <p className="mt-3 text-slate-800 whitespace-pre-wrap leading-relaxed break-words">
+      <p className="mt-3 text-[15px] text-slate-800 whitespace-pre-wrap leading-relaxed break-words">
         {message.body}
       </p>
 
