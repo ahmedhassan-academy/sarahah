@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
+import { GoogleLogin } from '@react-oauth/google';
 import FingerprintJS from '@fingerprintjs/fingerprintjs';
 import api from '../api/client';
 import { useAuth } from '../store/auth';
-import { profileUrl, rootOrigin } from '../lib/host';
+import { profileUrl } from '../lib/host';
 import {
   getVisitorProfile,
   getVisitorToken,
@@ -37,10 +38,10 @@ function relativeTime(iso, t) {
   return t('time.yearsAgo', { n: Math.floor(d / 365) });
 }
 
-export default function PublicProfile({ usernameOverride }) {
+export default function PublicProfile() {
   const { t, i18n } = useTranslation();
   const params = useParams();
-  const username = usernameOverride || params.username;
+  const username = params.username;
   const user = useAuth((s) => s.user);
 
   const [profile, setProfile] = useState(null);
@@ -164,13 +165,25 @@ export default function PublicProfile({ usernameOverride }) {
     }
   };
 
-  // Google forbids wildcard origins, so the sign-in button can't run on a
-  // per-account subdomain. Send the visitor to the apex (registered) origin to
-  // sign in; the session cookie is shared back across `.saraha.pro`.
-  const goToSignIn = () => {
-    const ret = encodeURIComponent(window.location.href);
-    window.location.href = `${rootOrigin()}/visitor-signin?return=${ret}`;
+  const onGoogleSuccess = async (cred) => {
+    const idToken = cred?.credential || '';
+    if (!idToken) return;
+    try {
+      const { data } = await api.post('/auth/google-session', { id_token: idToken });
+      saveVisitorSession(data.token, data.profile);
+      setGoogleProfile(data.profile);
+    } catch (err) {
+      const code = err.response?.data?.error;
+      toast.error(
+        code === 'account_banned'
+          ? t('errors.account_banned', { defaultValue: 'This account is banned.' })
+          : t('profile.googleFailed', { defaultValue: 'Google sign-in failed.' })
+      );
+    }
   };
+
+  const onGoogleError = () =>
+    toast.error(t('profile.googleFailed', { defaultValue: 'Google sign-in failed.' }));
 
   const signOutGoogle = () => {
     setGoogleProfile(null);
@@ -295,21 +308,14 @@ export default function PublicProfile({ usernameOverride }) {
                 })}
               </p>
               <div className="flex justify-center">
-                <button
-                  type="button"
-                  onClick={goToSignIn}
-                  className="inline-flex items-center gap-3 rounded-full bg-[#1a73e8] hover:bg-[#1b66c9] text-white font-medium text-sm ps-1.5 pe-4 py-1.5 shadow-sm transition"
-                >
-                  <span className="grid place-items-center w-8 h-8 rounded-full bg-white">
-                    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-                      <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.71-1.57 2.68-3.89 2.68-6.62z" />
-                      <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.02-3.7H.96v2.34A9 9 0 0 0 9 18z" />
-                      <path fill="#FBBC05" d="M3.98 10.72a5.4 5.4 0 0 1 0-3.44V4.94H.96a9 9 0 0 0 0 8.12l3.02-2.34z" />
-                      <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.94l3.02 2.34C4.68 5.16 6.66 3.58 9 3.58z" />
-                    </svg>
-                  </span>
-                  {t('profile.signInWithGoogle', { defaultValue: 'Sign in with Google' })}
-                </button>
+                <GoogleLogin
+                  onSuccess={onGoogleSuccess}
+                  onError={onGoogleError}
+                  theme="filled_blue"
+                  shape="pill"
+                  text="signin_with"
+                  useOneTap={false}
+                />
               </div>
             </div>
           ) : (

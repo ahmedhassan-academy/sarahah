@@ -33,7 +33,7 @@ export function profileUrl(handleOrUser) {
   if (typeof window === 'undefined') return `/${handle}`;
   const { protocol, host } = window.location;
   if (matchesSubdomainHost(host)) {
-    return `${protocol}//${handle}.${SUBDOMAIN_HOST}`;
+    return `${protocol}//${SUBDOMAIN_HOST}/${handle}`;
   }
   return `${protocol}//${host}/${handle}`;
 }

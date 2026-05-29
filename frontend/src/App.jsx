@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
-import MinimalLayout from './components/MinimalLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import Landing from './pages/Landing';
@@ -25,13 +24,12 @@ export default function App() {
 
   const subUsername = getSubdomainUsername();
   if (subUsername) {
-    return (
-      <Routes>
-        <Route element={<MinimalLayout />}>
-          <Route path="*" element={<PublicProfile usernameOverride={subUsername} />} />
-        </Route>
-      </Routes>
-    );
+    // Old per-account links (username.saraha.pro) now live at www.saraha.pro/username.
+    // Redirect so previously shared links keep working.
+    if (typeof window !== 'undefined') {
+      window.location.replace(`https://www.saraha.pro/${subUsername}`);
+    }
+    return null;
   }
 
   return (
