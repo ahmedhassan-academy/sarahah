@@ -155,7 +155,7 @@ export default function Inbox() {
             <button
               type="button"
               onClick={() => setShareOpen(true)}
-              className="col-span-2 inline-flex items-center justify-center gap-2 rounded-xl bg-accent-blue text-accent-blueText font-semibold py-2.5 text-sm hover:brightness-95 transition"
+              className="col-span-2 inline-flex items-center justify-center gap-2 rounded-md bg-accent-blue text-accent-blueText font-semibold py-2.5 text-sm hover:brightness-95 transition"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="18" cy="5" r="3" />
@@ -168,7 +168,7 @@ export default function Inbox() {
             <button
               type="button"
               onClick={() => (window.location.href = '/help')}
-              className="col-span-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-accent-yellow text-accent-yellowText font-semibold py-2.5 text-sm hover:brightness-95 transition"
+              className="col-span-1 inline-flex items-center justify-center gap-1.5 rounded-md bg-accent-yellow text-accent-yellowText font-semibold py-2.5 text-sm hover:brightness-95 transition"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" />
@@ -180,12 +180,12 @@ export default function Inbox() {
         </div>
 
         <div className="px-3 sm:px-5 pb-4 border-t border-slate-100 pt-3">
-          <div className="grid grid-cols-4 gap-1 p-1 rounded-2xl bg-slate-100">
+          <div className="grid grid-cols-4 gap-1 p-1 rounded-lg bg-slate-100">
             {TABS.map((k) => (
               <button
                 key={k}
                 onClick={() => setTab(k)}
-                className={`py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                className={`py-2.5 rounded-md text-sm font-semibold transition-colors ${
                   tab === k
                     ? 'bg-brand-500 text-white shadow-soft'
                     : 'text-slate-600 hover:bg-slate-100'
