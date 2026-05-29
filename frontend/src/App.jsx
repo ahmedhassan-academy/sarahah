@@ -8,6 +8,7 @@ import Landing from './pages/Landing';
 import Register from './pages/Register';
 import Login from './pages/Login';
 import PublicProfile from './pages/PublicProfile';
+import VisitorSignIn from './pages/VisitorSignIn';
 import Inbox from './pages/Inbox';
 import Settings from './pages/Settings';
 import Admin from './pages/Admin';
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/help" element={<Help />} />
+        <Route path="/visitor-signin" element={<VisitorSignIn />} />
         <Route
           path="/inbox"
           element={

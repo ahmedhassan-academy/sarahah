@@ -37,3 +37,22 @@ export function profileUrl(handleOrUser) {
   }
   return `${protocol}//${host}/${handle}`;
 }
+
+// Origin where Google sign-in is allowed to run. Google forbids wildcard
+// JavaScript origins, so per-account subdomains can never be registered —
+// sign-in always happens on the apex (www) host, which is registered.
+export function rootOrigin() {
+  if (typeof window === 'undefined') return '';
+  const { protocol, hostname } = window.location;
+  if (matchesSubdomainHost(hostname)) return `${protocol}//www.${SUBDOMAIN_HOST}`;
+  return window.location.origin;
+}
+
+// Cookie domain that is shared across every saraha.pro subdomain, so a session
+// set on the apex is visible on each profile subdomain. Null in dev (localhost),
+// where the default current-host scope is correct.
+export function rootCookieDomain() {
+  if (typeof window === 'undefined') return null;
+  if (matchesSubdomainHost(window.location.hostname)) return `.${SUBDOMAIN_HOST}`;
+  return null;
+}

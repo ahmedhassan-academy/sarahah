@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getVisitorToken, clearVisitorSession } from '../lib/visitorSession';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:4000/api',
@@ -10,7 +11,7 @@ api.interceptors.request.use((cfg) => {
     cfg.headers.Authorization = `Bearer ${userToken}`;
     return cfg;
   }
-  const visitorToken = localStorage.getItem('sarahah_google_token');
+  const visitorToken = getVisitorToken();
   if (visitorToken) {
     cfg.headers.Authorization = `Bearer ${visitorToken}`;
   }
@@ -25,9 +26,8 @@ api.interceptors.response.use(
       if (!path.startsWith('/login') && !path.startsWith('/register')) {
         if (localStorage.getItem('sarahah_token')) {
           localStorage.removeItem('sarahah_token');
-        } else if (localStorage.getItem('sarahah_google_token')) {
-          localStorage.removeItem('sarahah_google_token');
-          localStorage.removeItem('sarahah_google_profile');
+        } else if (getVisitorToken()) {
+          clearVisitorSession();
         }
       }
     }

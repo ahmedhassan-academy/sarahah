@@ -2,52 +2,23 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
-import { GoogleLogin } from '@react-oauth/google';
 import FingerprintJS from '@fingerprintjs/fingerprintjs';
 import api from '../api/client';
 import { useAuth } from '../store/auth';
-import { profileUrl } from '../lib/host';
+import { profileUrl, rootOrigin } from '../lib/host';
+import {
+  getVisitorProfile,
+  getVisitorToken,
+  saveVisitorSession,
+  clearVisitorSession,
+} from '../lib/visitorSession';
 
 const MAX = 1000;
-const VISITOR_TOKEN_KEY = 'sarahah_google_token';
-const VISITOR_PROFILE_KEY = 'sarahah_google_profile';
-const LEGACY_VISITOR_KEY = 'sarahah:googleAuth';
 
 let fpAgentPromise = null;
 function getFpAgent() {
   if (!fpAgentPromise) fpAgentPromise = FingerprintJS.load();
   return fpAgentPromise;
-}
-
-function loadVisitorProfile() {
-  try {
-    // Clean up the 1-hour token storage from the previous version.
-    localStorage.removeItem(LEGACY_VISITOR_KEY);
-    const raw = localStorage.getItem(VISITOR_PROFILE_KEY);
-    if (!raw) return null;
-    if (!localStorage.getItem(VISITOR_TOKEN_KEY)) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-function saveVisitorSession(token, profile) {
-  try {
-    localStorage.setItem(VISITOR_TOKEN_KEY, token);
-    localStorage.setItem(VISITOR_PROFILE_KEY, JSON.stringify(profile));
-  } catch {
-    /* ignore */
-  }
-}
-
-function clearVisitorSession() {
-  try {
-    localStorage.removeItem(VISITOR_TOKEN_KEY);
-    localStorage.removeItem(VISITOR_PROFILE_KEY);
-  } catch {
-    /* ignore */
-  }
 }
 
 function relativeTime(iso, t) {
@@ -76,7 +47,7 @@ export default function PublicProfile({ usernameOverride }) {
   const [state, setState] = useState('loading');
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
-  const [googleProfile, setGoogleProfile] = useState(() => loadVisitorProfile());
+  const [googleProfile, setGoogleProfile] = useState(() => getVisitorProfile());
   const [isPrivate, setIsPrivate] = useState(true);
   const [saveToSent, setSaveToSent] = useState(true);
   const [publicMessages, setPublicMessages] = useState([]);
@@ -141,7 +112,7 @@ export default function PublicProfile({ usernameOverride }) {
       .then(({ data }) => {
         if (!alive) return;
         setGoogleProfile(data.profile);
-        const tok = localStorage.getItem(VISITOR_TOKEN_KEY);
+        const tok = getVisitorToken();
         if (tok) saveVisitorSession(tok, data.profile);
       })
       .catch(() => {
@@ -193,25 +164,12 @@ export default function PublicProfile({ usernameOverride }) {
     }
   };
 
-  const onGoogleSuccess = async (credentialResponse) => {
-    const idToken = credentialResponse?.credential || '';
-    if (!idToken) return;
-    try {
-      const { data } = await api.post('/auth/google-session', { id_token: idToken });
-      saveVisitorSession(data.token, data.profile);
-      setGoogleProfile(data.profile);
-    } catch (err) {
-      const code = err.response?.data?.error;
-      const msg =
-        code === 'account_banned'
-          ? t('errors.account_banned', { defaultValue: 'This account is banned.' })
-          : t('profile.googleFailed', { defaultValue: 'Google sign-in failed.' });
-      toast.error(msg);
-    }
-  };
-
-  const onGoogleError = () => {
-    toast.error(t('profile.googleFailed', { defaultValue: 'Google sign-in failed.' }));
+  // Google forbids wildcard origins, so the sign-in button can't run on a
+  // per-account subdomain. Send the visitor to the apex (registered) origin to
+  // sign in; the session cookie is shared back across `.saraha.pro`.
+  const goToSignIn = () => {
+    const ret = encodeURIComponent(window.location.href);
+    window.location.href = `${rootOrigin()}/visitor-signin?return=${ret}`;
   };
 
   const signOutGoogle = () => {
@@ -337,14 +295,21 @@ export default function PublicProfile({ usernameOverride }) {
                 })}
               </p>
               <div className="flex justify-center">
-                <GoogleLogin
-                  onSuccess={onGoogleSuccess}
-                  onError={onGoogleError}
-                  theme="filled_blue"
-                  shape="pill"
-                  text="signin_with"
-                  useOneTap={false}
-                />
+                <button
+                  type="button"
+                  onClick={goToSignIn}
+                  className="inline-flex items-center gap-3 rounded-full bg-[#1a73e8] hover:bg-[#1b66c9] text-white font-medium text-sm ps-1.5 pe-4 py-1.5 shadow-sm transition"
+                >
+                  <span className="grid place-items-center w-8 h-8 rounded-full bg-white">
+                    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                      <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.71-1.57 2.68-3.89 2.68-6.62z" />
+                      <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.02-3.7H.96v2.34A9 9 0 0 0 9 18z" />
+                      <path fill="#FBBC05" d="M3.98 10.72a5.4 5.4 0 0 1 0-3.44V4.94H.96a9 9 0 0 0 0 8.12l3.02-2.34z" />
+                      <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.94l3.02 2.34C4.68 5.16 6.66 3.58 9 3.58z" />
+                    </svg>
+                  </span>
+                  {t('profile.signInWithGoogle', { defaultValue: 'Sign in with Google' })}
+                </button>
               </div>
             </div>
           ) : (
