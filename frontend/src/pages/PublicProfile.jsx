@@ -304,7 +304,7 @@ export default function PublicProfile() {
               <p className="text-xs text-slate-500 mb-4">
                 {t('profile.signInRequired', {
                   defaultValue:
-                    'Sign in with Google to send. The recipient never sees who you are — but admins can review for safety.',
+                    'Sign in with Google to send. The recipient never sees who you are.',
                 })}
               </p>
               <div className="flex justify-center">

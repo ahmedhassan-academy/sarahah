@@ -51,7 +51,7 @@ export default function VisitorSignIn() {
         <p className="mt-2 text-sm text-slate-600">
           {t('profile.signInRequired', {
             defaultValue:
-              'Sign in with Google to send. The recipient never sees who you are — but admins can review for safety.',
+              'Sign in with Google to send. The recipient never sees who you are.',
           })}
         </p>
         <div className="mt-6 flex justify-center">
