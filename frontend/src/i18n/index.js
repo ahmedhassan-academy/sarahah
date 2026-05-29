@@ -141,6 +141,8 @@ const ar = {
     privateMessage: 'رسالة سرية',
     comingSoon: 'قريبًا',
     options: 'خيارات',
+    reply: 'رد',
+    react: 'تفاعل',
   },
   share: {
     title: 'احصل على المزيد من الزوار والرسائل من خلال مشاركة رابط صراحة الخاص بك في كل مكان',
@@ -377,6 +379,8 @@ const en = {
     privateMessage: 'Private message',
     comingSoon: 'Coming soon',
     options: 'Options',
+    reply: 'Reply',
+    react: 'React',
   },
   share: {
     title: 'Get more visitors and messages by sharing your Sarahah link everywhere',

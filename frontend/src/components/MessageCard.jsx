@@ -46,11 +46,8 @@ export default function MessageCard({ message, onFavorite, onDelete, onMarkRead 
       }`}
     >
       <div className="flex items-start gap-3">
-        <div className="shrink-0 w-10 h-10 rounded-full bg-brand-50 grid place-items-center text-brand-600">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3.5 20a7.5 7.5 0 0 1 17 0" />
-            <circle cx="12" cy="8" r="4.5" />
-          </svg>
+        <div className="shrink-0 w-10 h-10 rounded-full bg-brand-50 grid place-items-center overflow-hidden">
+          <img src="/logo.png" alt="" className="w-7 h-7 object-contain" />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -122,6 +119,34 @@ export default function MessageCard({ message, onFavorite, onDelete, onMarkRead 
       <p className="mt-3 text-slate-800 whitespace-pre-wrap leading-relaxed break-words">
         {message.body}
       </p>
+
+      <div className="mt-4 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+          aria-label={t('inbox.reply')}
+          title={t('inbox.reply')}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            <path d="M12 8v6M9 11h6" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+          aria-label={t('inbox.react')}
+          title={t('inbox.react')}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M8.5 14a4 4 0 0 0 7 0" />
+            <path d="M9 9.5h.01M15 9.5h.01" />
+          </svg>
+        </button>
+      </div>
     </article>
   );
 }
