@@ -116,7 +116,7 @@ export default function MessageCard({ message, onFavorite, onDelete, onMarkRead 
         </div>
       </div>
 
-      <p className="mt-3 text-slate-800 whitespace-pre-wrap leading-relaxed break-words">
+      <p className="mt-3 text-slate-800 whitespace-pre-wrap leading-normal break-words">
         {message.body}
       </p>
 
