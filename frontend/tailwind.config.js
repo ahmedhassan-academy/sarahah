@@ -5,6 +5,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ['"Cairo"', '"Inter"', 'system-ui', 'sans-serif'],
+        native: ['system-ui', '-apple-system', '"Segoe UI"', 'Roboto', 'Arial', 'sans-serif'],
       },
       colors: {
         brand: {

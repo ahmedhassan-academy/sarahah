@@ -41,7 +41,7 @@ export default function MessageCard({ message, onFavorite, onDelete, onMarkRead 
   return (
     <article
       onClick={handleClick}
-      className={`card p-4 sm:p-5 cursor-pointer transition-shadow hover:shadow-md ${
+      className={`card p-4 sm:p-5 cursor-pointer transition-shadow hover:shadow-md font-native ${
         !message.is_read ? 'ring-1 ring-brand-200' : ''
       }`}
     >
@@ -116,7 +116,7 @@ export default function MessageCard({ message, onFavorite, onDelete, onMarkRead 
         </div>
       </div>
 
-      <p className="mt-3 text-[15px] text-slate-800 whitespace-pre-wrap leading-relaxed break-words">
+      <p className="mt-3 text-slate-800 whitespace-pre-wrap leading-relaxed break-words">
         {message.body}
       </p>
 
