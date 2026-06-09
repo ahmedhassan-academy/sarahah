@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import api from '../api/client';
 import { useAuth } from '../store/auth';
+import SenderDetails from '../components/SenderDetails';
 
 function StatCard({ label, value, tint = 'brand' }) {
   const tints = {
@@ -255,30 +256,7 @@ function MessagesTab() {
                   </div>
                   <span>{formatDate(m.created_at, i18n.language)}</span>
                 </div>
-                {(m.sender_email || m.sender_ip || m.sender_fingerprint) && (
-                  <div className="mt-1 text-[11px] text-ink-muted flex flex-wrap gap-x-3 gap-y-1" dir="ltr">
-                    {m.sender_email && <span>email: {m.sender_email}</span>}
-                    {m.sender_ip && <span>ip: {m.sender_ip}</span>}
-                    {m.sender_fingerprint && (
-                      <button
-                        type="button"
-                        onClick={() => setFingerprintFilter(m.sender_fingerprint)}
-                        title={m.sender_fingerprint}
-                        className={`underline-offset-2 hover:underline ${
-                          m.fingerprint_banned ? 'text-red-600 font-semibold' : 'text-brand-700'
-                        }`}
-                      >
-                        device: {m.sender_fingerprint.slice(0, 10)}…
-                        {m.fingerprint_banned && ' (banned)'}
-                      </button>
-                    )}
-                    {m.sender_user_agent && (
-                      <span className="truncate max-w-[260px]" title={m.sender_user_agent}>
-                        ua: {m.sender_user_agent}
-                      </span>
-                    )}
-                  </div>
-                )}
+                <SenderDetails m={m} onFilterFingerprint={setFingerprintFilter} />
                 <p className="mt-2 text-ink whitespace-pre-wrap leading-relaxed">{m.body}</p>
                 <div className="mt-3 flex items-center gap-2 flex-wrap">
                   <button onClick={() => hideToggle(m.id)} className="btn-outline text-xs">
