@@ -1,6 +1,31 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import toast from 'react-hot-toast';
 import { parseUserAgent } from '../lib/ua';
+
+// Copy text to clipboard with a fallback for older / non-secure contexts.
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* fall through to legacy path */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
 
 const OS_ICON = {
   windows: '🪟',
@@ -101,22 +126,38 @@ export default function SenderDetails({ m, onFilterFingerprint }) {
           </Fact>
         )}
         {fp && (
-          <button
-            type="button"
-            onClick={() => onFilterFingerprint?.(fp)}
-            title={t('admin.sd.deviceIdHint')}
-            className="text-start"
-          >
-            <Fact
-              icon="🔑"
-              label={t('admin.sd.deviceId')}
-              accent={m.fingerprint_banned ? 'text-red-600' : 'text-brand-700'}
-            >
-              <span dir="ltr" className="underline-offset-2 hover:underline">
-                {fp.slice(0, 8)}…{m.fingerprint_banned ? ` · ${t('admin.sd.banned')}` : ''}
+          <div className="col-span-2 sm:col-span-3 rounded-xl border border-slate-200 bg-white px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
+                🔑 {t('admin.sd.deviceId')}
+                {m.fingerprint_banned && (
+                  <span className="ms-1 text-red-600">· {t('admin.sd.banned')}</span>
+                )}
               </span>
-            </Fact>
-          </button>
+              <button
+                type="button"
+                onClick={() => onFilterFingerprint?.(fp)}
+                className="text-[10px] font-semibold text-ink-muted hover:text-ink underline-offset-2 hover:underline"
+              >
+                {t('admin.sd.filterDevice')}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                const ok = await copyText(fp);
+                if (ok) toast.success(t('admin.sd.copied'));
+                else toast.error(t('errors.server_error'));
+              }}
+              title={t('admin.sd.copyHint')}
+              dir="ltr"
+              className={`mt-1 w-full text-start text-sm font-semibold break-all underline-offset-2 hover:underline ${
+                m.fingerprint_banned ? 'text-red-600' : 'text-brand-700'
+              }`}
+            >
+              {fp}
+            </button>
+          </div>
         )}
       </div>
 
