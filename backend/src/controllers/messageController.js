@@ -126,7 +126,7 @@ async function listInbox(req, res) {
       const r = await pool.query(
         `SELECT id, body, is_read, is_favorite, is_public, created_at
          FROM messages
-         WHERE sender_id = $1 AND save_to_sent = TRUE
+         WHERE sender_id = $1 AND save_to_sent = TRUE AND deleted_at IS NULL
          ORDER BY created_at DESC
          LIMIT 200`,
         [req.userId]
@@ -136,7 +136,7 @@ async function listInbox(req, res) {
       const r = await pool.query(
         `SELECT id, body, is_read, is_favorite, is_public, created_at
          FROM messages
-         WHERE recipient_id = $1 AND is_hidden = FALSE AND is_public = TRUE
+         WHERE recipient_id = $1 AND is_hidden = FALSE AND is_public = TRUE AND deleted_at IS NULL
          ORDER BY created_at DESC
          LIMIT 200`,
         [req.userId]
@@ -144,7 +144,7 @@ async function listInbox(req, res) {
       rows = r.rows;
     } else {
       const params = [req.userId];
-      let where = `recipient_id = $1 AND is_hidden = FALSE`;
+      let where = `recipient_id = $1 AND is_hidden = FALSE AND deleted_at IS NULL`;
       if (filter === 'unread') where += ` AND is_read = FALSE`;
       if (filter === 'favorite') where += ` AND is_favorite = TRUE`;
 
@@ -166,7 +166,8 @@ async function listInbox(req, res) {
          COUNT(*) FILTER (WHERE recipient_id = $1 AND is_hidden = FALSE AND is_favorite = TRUE)::int AS favorite,
          COUNT(*) FILTER (WHERE recipient_id = $1 AND is_hidden = FALSE AND is_public = TRUE)::int AS public,
          COUNT(*) FILTER (WHERE sender_id = $1 AND save_to_sent = TRUE)::int AS sent
-       FROM messages`,
+       FROM messages
+       WHERE deleted_at IS NULL`,
       [req.userId]
     );
 
@@ -182,7 +183,7 @@ async function markRead(req, res) {
   if (!id) return res.status(400).json({ error: 'bad_id' });
   try {
     const { rowCount } = await pool.query(
-      `UPDATE messages SET is_read = TRUE WHERE id = $1 AND recipient_id = $2`,
+      `UPDATE messages SET is_read = TRUE WHERE id = $1 AND recipient_id = $2 AND deleted_at IS NULL`,
       [id, req.userId]
     );
     if (!rowCount) return res.status(404).json({ error: 'not_found' });
@@ -199,7 +200,7 @@ async function toggleFavorite(req, res) {
   try {
     const { rows } = await pool.query(
       `UPDATE messages SET is_favorite = NOT is_favorite
-       WHERE id = $1 AND recipient_id = $2
+       WHERE id = $1 AND recipient_id = $2 AND deleted_at IS NULL
        RETURNING is_favorite`,
       [id, req.userId]
     );
@@ -216,7 +217,8 @@ async function deleteMessage(req, res) {
   if (!id) return res.status(400).json({ error: 'bad_id' });
   try {
     const { rowCount } = await pool.query(
-      `DELETE FROM messages WHERE id = $1 AND recipient_id = $2`,
+      `UPDATE messages SET deleted_at = NOW()
+       WHERE id = $1 AND recipient_id = $2 AND deleted_at IS NULL`,
       [id, req.userId]
     );
     if (!rowCount) return res.status(404).json({ error: 'not_found' });

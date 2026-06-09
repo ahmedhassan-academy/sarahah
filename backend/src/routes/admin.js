@@ -14,6 +14,8 @@ router.patch('/users/:id/ban', ctrl.banUser);
 router.patch('/users/:id/unban', ctrl.unbanUser);
 router.patch('/users/:id/admin', ctrl.setAdmin);
 router.delete('/messages/:id', ctrl.deleteMessage);
+router.patch('/messages/:id/restore', ctrl.restoreMessage);
+router.delete('/messages/:id/purge', ctrl.purgeMessage);
 router.patch('/messages/:id/hide', ctrl.toggleHide);
 router.post('/fingerprints/:fingerprint/ban', ctrl.banFingerprint);
 router.delete('/fingerprints/:fingerprint/ban', ctrl.unbanFingerprint);

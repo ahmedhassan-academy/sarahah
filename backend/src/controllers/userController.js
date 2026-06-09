@@ -152,7 +152,7 @@ async function getPublicMessages(req, res) {
     const { rows } = await pool.query(
       `SELECT id, body, created_at
        FROM messages
-       WHERE recipient_id = $1 AND is_public = TRUE AND is_hidden = FALSE
+       WHERE recipient_id = $1 AND is_public = TRUE AND is_hidden = FALSE AND deleted_at IS NULL
        ORDER BY created_at DESC
        LIMIT 50`,
       [u.id]

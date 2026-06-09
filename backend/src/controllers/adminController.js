@@ -8,10 +8,11 @@ async function getStats(_req, res) {
         (SELECT COUNT(*)::int FROM users) AS users_total,
         (SELECT COUNT(*)::int FROM users WHERE is_banned = TRUE) AS users_banned,
         (SELECT COUNT(*)::int FROM users WHERE is_admin = TRUE) AS users_admin,
-        (SELECT COUNT(*)::int FROM messages) AS messages_total,
-        (SELECT COUNT(*)::int FROM messages WHERE is_hidden = TRUE) AS messages_hidden,
+        (SELECT COUNT(*)::int FROM messages WHERE deleted_at IS NULL) AS messages_total,
+        (SELECT COUNT(*)::int FROM messages WHERE is_hidden = TRUE AND deleted_at IS NULL) AS messages_hidden,
+        (SELECT COUNT(*)::int FROM messages WHERE deleted_at IS NOT NULL) AS messages_trashed,
         (SELECT COUNT(*)::int FROM users WHERE created_at > NOW() - INTERVAL '7 days') AS users_last_7d,
-        (SELECT COUNT(*)::int FROM messages WHERE created_at > NOW() - INTERVAL '7 days') AS messages_last_7d
+        (SELECT COUNT(*)::int FROM messages WHERE created_at > NOW() - INTERVAL '7 days' AND deleted_at IS NULL) AS messages_last_7d
     `);
     res.json({ stats: rows[0] });
   } catch (err) {
@@ -37,8 +38,8 @@ async function listUsers(req, res) {
       `SELECT
          u.id, u.username, u.email, u.display_name, u.is_admin, u.is_banned,
          u.allow_messages, u.created_at, u.banned_at,
-         (SELECT COUNT(*)::int FROM messages WHERE recipient_id = u.id) AS msgs_received,
-         (SELECT COUNT(*)::int FROM messages WHERE sender_id = u.id) AS msgs_sent
+         (SELECT COUNT(*)::int FROM messages WHERE recipient_id = u.id AND deleted_at IS NULL) AS msgs_received,
+         (SELECT COUNT(*)::int FROM messages WHERE sender_id = u.id AND deleted_at IS NULL) AS msgs_sent
        FROM users u
        WHERE ${where}
        ORDER BY u.created_at DESC
@@ -58,10 +59,13 @@ async function listMessages(req, res) {
   const q = String(req.query.q || '').trim().toLowerCase();
   const fingerprint = String(req.query.fingerprint || '').trim();
   const googleSub = String(req.query.google_sub || '').trim();
+  const trashed = req.query.trashed === '1' || req.query.trashed === 'true';
 
   try {
     const params = [];
     const conds = [];
+    // Trash view shows only soft-deleted; default view hides them.
+    conds.push(trashed ? 'm.deleted_at IS NOT NULL' : 'm.deleted_at IS NULL');
     if (q) {
       params.push(`%${q}%`);
       conds.push(`LOWER(m.body) LIKE $${params.length}`);
@@ -111,7 +115,7 @@ async function listMessages(req, res) {
                   COUNT(*)::int AS total_messages,
                   COUNT(DISTINCT recipient_id)::int AS total_recipients
              FROM messages
-            WHERE sender_google_sub = ANY($1::text[])
+            WHERE sender_google_sub = ANY($1::text[]) AND deleted_at IS NULL
             GROUP BY sender_google_sub`,
           [subs]
         ),
@@ -139,7 +143,7 @@ async function listMessages(req, res) {
                 COUNT(DISTINCT recipient_id)::int AS recipient_count,
                 (array_agg(DISTINCT sender_email) FILTER (WHERE sender_email IS NOT NULL))[1:6] AS emails
            FROM messages
-          WHERE sender_fingerprint = ANY($1::text[])
+          WHERE sender_fingerprint = ANY($1::text[]) AND deleted_at IS NULL
           GROUP BY sender_fingerprint`,
         [fps]
       );
@@ -248,15 +252,53 @@ async function setAdmin(req, res) {
   }
 }
 
+// Soft delete — moves the message to Trash (recoverable) instead of erasing it.
 async function deleteMessage(req, res) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: 'bad_id' });
   try {
-    const { rowCount } = await pool.query(`DELETE FROM messages WHERE id = $1`, [id]);
+    const { rowCount } = await pool.query(
+      `UPDATE messages SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`,
+      [id]
+    );
     if (!rowCount) return res.status(404).json({ error: 'not_found' });
     res.json({ ok: true });
   } catch (err) {
     console.error('[admin/deleteMessage]', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+}
+
+// Restore a soft-deleted message back from Trash.
+async function restoreMessage(req, res) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: 'bad_id' });
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE messages SET deleted_at = NULL WHERE id = $1 AND deleted_at IS NOT NULL`,
+      [id]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'not_found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[admin/restoreMessage]', err);
+    res.status(500).json({ error: 'server_error' });
+  }
+}
+
+// Permanently erase a message (only from Trash). This cannot be undone.
+async function purgeMessage(req, res) {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: 'bad_id' });
+  try {
+    const { rowCount } = await pool.query(
+      `DELETE FROM messages WHERE id = $1 AND deleted_at IS NOT NULL`,
+      [id]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'not_found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[admin/purgeMessage]', err);
     res.status(500).json({ error: 'server_error' });
   }
 }
@@ -285,6 +327,8 @@ module.exports = {
   unbanUser,
   setAdmin,
   deleteMessage,
+  restoreMessage,
+  purgeMessage,
   toggleHide,
   banFingerprint,
   unbanFingerprint,

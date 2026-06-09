@@ -154,15 +154,17 @@ function MessagesTab() {
   const [q, setQ] = useState('');
   const [fingerprintFilter, setFingerprintFilter] = useState('');
   const [googleFilter, setGoogleFilter] = useState(null); // { sub, label }
+  const [view, setView] = useState('active'); // 'active' | 'trash'
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const load = async (query = q, fp = fingerprintFilter, gf = googleFilter) => {
+  const load = async (query = q, fp = fingerprintFilter, gf = googleFilter, v = view) => {
     setLoading(true);
     try {
       const params = { q: query, limit: 100 };
       if (fp) params.fingerprint = fp;
       if (gf?.sub) params.google_sub = gf.sub;
+      if (v === 'trash') params.trashed = 1;
       const { data } = await api.get('/admin/messages', { params });
       setMessages(data.messages);
     } finally {
@@ -171,15 +173,32 @@ function MessagesTab() {
   };
 
   useEffect(() => {
-    const id = setTimeout(() => load(q, fingerprintFilter, googleFilter), 250);
+    const id = setTimeout(() => load(q, fingerprintFilter, googleFilter, view), 250);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, fingerprintFilter, googleFilter]);
+  }, [q, fingerprintFilter, googleFilter, view]);
 
+  // Active view: delete = move to Trash (recoverable).
   const remove = async (id) => {
-    if (!confirm(t('admin.confirmDeleteMsg'))) return;
+    if (!confirm(t('admin.confirmTrash'))) return;
     try {
       await api.delete(`/admin/messages/${id}`);
+      setMessages((ms) => ms.filter((m) => m.id !== id));
+      toast.success(t('admin.movedToTrash'));
+    } catch { toast.error(t('errors.server_error')); }
+  };
+  // Trash view: restore back, or permanently erase.
+  const restore = async (id) => {
+    try {
+      await api.patch(`/admin/messages/${id}/restore`);
+      setMessages((ms) => ms.filter((m) => m.id !== id));
+      toast.success(t('admin.restored'));
+    } catch { toast.error(t('errors.server_error')); }
+  };
+  const purge = async (id) => {
+    if (!confirm(t('admin.confirmPurge'))) return;
+    try {
+      await api.delete(`/admin/messages/${id}/purge`);
       setMessages((ms) => ms.filter((m) => m.id !== id));
     } catch { toast.error(t('errors.server_error')); }
   };
@@ -211,6 +230,20 @@ function MessagesTab() {
 
   return (
     <div>
+      <div className="mb-4 flex gap-2">
+        <button
+          onClick={() => setView('active')}
+          className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${view === 'active' ? 'bg-brand-500 text-white' : 'bg-white text-ink-muted border border-slate-200 hover:bg-slate-50'}`}
+        >
+          {t('admin.tabActive')}
+        </button>
+        <button
+          onClick={() => setView('trash')}
+          className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${view === 'trash' ? 'bg-red-600 text-white' : 'bg-white text-ink-muted border border-slate-200 hover:bg-slate-50'}`}
+        >
+          🗑️ {t('admin.tabTrash')}
+        </button>
+      </div>
       <input
         className="input mb-4"
         placeholder={t('admin.searchMessages')}
@@ -279,28 +312,41 @@ function MessagesTab() {
                 />
                 <p className="mt-2 text-ink whitespace-pre-wrap leading-relaxed">{m.body}</p>
                 <div className="mt-3 flex items-center gap-2 flex-wrap">
-                  <button onClick={() => hideToggle(m.id)} className="btn-outline text-xs">
-                    {m.is_hidden ? t('admin.unhide') : t('admin.hide')}
-                  </button>
-                  <button onClick={() => remove(m.id)} className="btn text-xs bg-red-600 text-white hover:bg-red-700">
-                    {t('admin.deleteMsg')}
-                  </button>
-                  {m.sender_fingerprint && (
-                    m.fingerprint_banned ? (
-                      <button
-                        onClick={() => unbanDevice(m.sender_fingerprint)}
-                        className="btn-outline text-xs"
-                      >
-                        {t('admin.unbanDevice', { defaultValue: 'Unban device' })}
+                  {view === 'trash' ? (
+                    <>
+                      <button onClick={() => restore(m.id)} className="btn text-xs bg-brand-500 text-white hover:bg-brand-600">
+                        ↩️ {t('admin.restore')}
                       </button>
-                    ) : (
-                      <button
-                        onClick={() => banDevice(m.sender_fingerprint)}
-                        className="btn text-xs bg-amber-600 text-white hover:bg-amber-700"
-                      >
-                        {t('admin.banDevice', { defaultValue: 'Ban device' })}
+                      <button onClick={() => purge(m.id)} className="btn text-xs bg-red-600 text-white hover:bg-red-700">
+                        {t('admin.deleteForever')}
                       </button>
-                    )
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => hideToggle(m.id)} className="btn-outline text-xs">
+                        {m.is_hidden ? t('admin.unhide') : t('admin.hide')}
+                      </button>
+                      <button onClick={() => remove(m.id)} className="btn text-xs bg-red-600 text-white hover:bg-red-700">
+                        {t('admin.deleteMsg')}
+                      </button>
+                      {m.sender_fingerprint && (
+                        m.fingerprint_banned ? (
+                          <button
+                            onClick={() => unbanDevice(m.sender_fingerprint)}
+                            className="btn-outline text-xs"
+                          >
+                            {t('admin.unbanDevice', { defaultValue: 'Unban device' })}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => banDevice(m.sender_fingerprint)}
+                            className="btn text-xs bg-amber-600 text-white hover:bg-amber-700"
+                          >
+                            {t('admin.banDevice', { defaultValue: 'Ban device' })}
+                          </button>
+                        )
+                      )}
+                    </>
                   )}
                 </div>
               </div>

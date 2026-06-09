@@ -1,6 +1,6 @@
 const pool = require('./db');
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
 async function ensureSchemaVersionTable() {
   await pool.query(`
@@ -169,6 +169,15 @@ async function applyAll() {
       is_hosting BOOLEAN,
       looked_up_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `);
+
+  // v9 — soft delete (Trash). Deleting a message sets deleted_at instead of
+  // erasing the row, so admins can recover it. Normal views filter it out.
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_messages_deleted_at
+      ON messages (deleted_at)
+      WHERE deleted_at IS NOT NULL
   `);
 }
 
