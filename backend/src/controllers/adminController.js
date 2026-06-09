@@ -126,10 +126,31 @@ async function listMessages(req, res) {
       for (const v of seen) acctMap.set(v.sub, { ...(acctMap.get(v.sub) || {}), first_seen: v.first_seen, last_seen: v.last_seen, is_banned: v.is_banned });
     }
 
+    // Per-device intelligence: how many messages and — crucially — how many
+    // DISTINCT accounts/emails have been used from the same device fingerprint.
+    // account_count > 1 means one device is sending under multiple identities.
+    const fps = [...new Set(rows.map((m) => m.sender_fingerprint).filter(Boolean))];
+    const deviceMap = new Map();
+    if (fps.length) {
+      const { rows: dev } = await pool.query(
+        `SELECT sender_fingerprint AS fp,
+                COUNT(*)::int AS message_count,
+                COUNT(DISTINCT sender_email)::int AS account_count,
+                COUNT(DISTINCT recipient_id)::int AS recipient_count,
+                (array_agg(DISTINCT sender_email) FILTER (WHERE sender_email IS NOT NULL))[1:6] AS emails
+           FROM messages
+          WHERE sender_fingerprint = ANY($1::text[])
+          GROUP BY sender_fingerprint`,
+        [fps]
+      );
+      for (const d of dev) deviceMap.set(d.fp, d);
+    }
+
     const messages = rows.map((m) => ({
       ...m,
       net: m.sender_ip ? netMap.get(m.sender_ip) || null : null,
       google_account: m.sender_google_sub ? acctMap.get(m.sender_google_sub) || null : null,
+      device: m.sender_fingerprint ? deviceMap.get(m.sender_fingerprint) || null : null,
     }));
 
     res.json({ messages });

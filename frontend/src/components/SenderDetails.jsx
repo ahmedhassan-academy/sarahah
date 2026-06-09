@@ -82,6 +82,7 @@ export default function SenderDetails({ m, onFilterFingerprint, onFilterGoogleSu
   const ua = parseUserAgent(m.sender_user_agent);
   const fp = m.sender_fingerprint;
   const acct = m.google_account;
+  const dev = m.device;
 
   const hasAnything = m.sender_email || fp || ua || m.sender_google_sub;
   if (!hasAnything) return null;
@@ -245,6 +246,29 @@ export default function SenderDetails({ m, onFilterFingerprint, onFilterGoogleSu
             >
               {fp}
             </button>
+
+            {/* Auto-flag: one device used by multiple accounts = evasion attempt */}
+            {dev && dev.account_count > 1 ? (
+              <div className="mt-2 rounded-lg bg-red-50 border border-red-200 px-2.5 py-2">
+                <div className="text-xs font-bold text-red-700">
+                  ⚠️ {t('admin.sd.multiAccountWarn', { n: dev.account_count })}
+                </div>
+                {dev.emails?.length > 0 && (
+                  <div className="mt-1 flex flex-col gap-0.5 text-[11px] text-red-800" dir="ltr">
+                    {dev.emails.map((e) => (
+                      <span key={e} className="truncate">• {e}</span>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-1 text-[11px] text-red-700/80">
+                  {t('admin.sd.deviceTotals', { msgs: dev.message_count, ppl: dev.recipient_count })}
+                </div>
+              </div>
+            ) : dev && dev.message_count > 1 ? (
+              <div className="mt-2 text-[11px] text-ink-muted">
+                {t('admin.sd.deviceTotals', { msgs: dev.message_count, ppl: dev.recipient_count })}
+              </div>
+            ) : null}
           </div>
         )}
       </div>
