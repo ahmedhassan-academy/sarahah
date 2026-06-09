@@ -57,6 +57,7 @@ async function listMessages(req, res) {
   const offset = Math.max(parseInt(req.query.offset || '0', 10) || 0, 0);
   const q = String(req.query.q || '').trim().toLowerCase();
   const fingerprint = String(req.query.fingerprint || '').trim();
+  const googleSub = String(req.query.google_sub || '').trim();
 
   try {
     const params = [];
@@ -68,6 +69,10 @@ async function listMessages(req, res) {
     if (fingerprint) {
       params.push(fingerprint);
       conds.push(`m.sender_fingerprint = $${params.length}`);
+    }
+    if (googleSub) {
+      params.push(googleSub);
+      conds.push(`m.sender_google_sub = $${params.length}`);
     }
     const where = conds.length ? conds.join(' AND ') : '1=1';
     params.push(limit, offset);
@@ -94,9 +99,37 @@ async function listMessages(req, res) {
     // Enrich each message with the sender IP's network info (company/ISP +
     // Wi-Fi vs mobile-data), served from cache where possible.
     const netMap = await getNetForIps(rows.map((m) => m.sender_ip));
+
+    // Enrich Google-account senders with history + activity stats so the admin
+    // can see how active that account is and group all its messages.
+    const subs = [...new Set(rows.map((m) => m.sender_google_sub).filter(Boolean))];
+    const acctMap = new Map();
+    if (subs.length) {
+      const [{ rows: stats }, { rows: seen }] = await Promise.all([
+        pool.query(
+          `SELECT sender_google_sub AS sub,
+                  COUNT(*)::int AS total_messages,
+                  COUNT(DISTINCT recipient_id)::int AS total_recipients
+             FROM messages
+            WHERE sender_google_sub = ANY($1::text[])
+            GROUP BY sender_google_sub`,
+          [subs]
+        ),
+        pool.query(
+          `SELECT google_sub AS sub, first_seen, last_seen, is_banned
+             FROM google_visitors
+            WHERE google_sub = ANY($1::text[])`,
+          [subs]
+        ),
+      ]);
+      for (const s of stats) acctMap.set(s.sub, { ...s });
+      for (const v of seen) acctMap.set(v.sub, { ...(acctMap.get(v.sub) || {}), first_seen: v.first_seen, last_seen: v.last_seen, is_banned: v.is_banned });
+    }
+
     const messages = rows.map((m) => ({
       ...m,
       net: m.sender_ip ? netMap.get(m.sender_ip) || null : null,
+      google_account: m.sender_google_sub ? acctMap.get(m.sender_google_sub) || null : null,
     }));
 
     res.json({ messages });

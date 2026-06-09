@@ -53,6 +53,15 @@ const FORM_TINT = {
   unknown: 'bg-slate-100 text-slate-600',
 };
 
+function fmtDate(iso, lang) {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US', {
+      year: 'numeric', month: 'short', day: 'numeric',
+    });
+  } catch { return null; }
+}
+
 // One labelled fact: icon, small caption, the human-readable value.
 function Fact({ icon, label, children, accent }) {
   return (
@@ -66,14 +75,15 @@ function Fact({ icon, label, children, accent }) {
   );
 }
 
-export default function SenderDetails({ m, onFilterFingerprint }) {
-  const { t } = useTranslation();
+export default function SenderDetails({ m, onFilterFingerprint, onFilterGoogleSub }) {
+  const { t, i18n } = useTranslation();
   const [showRaw, setShowRaw] = useState(false);
 
   const ua = parseUserAgent(m.sender_user_agent);
   const fp = m.sender_fingerprint;
+  const acct = m.google_account;
 
-  const hasAnything = m.sender_email || fp || ua;
+  const hasAnything = m.sender_email || fp || ua || m.sender_google_sub;
   if (!hasAnything) return null;
 
   const formFactor = ua ? t(`admin.sd.form.${ua.device.type}`) : null;
@@ -95,6 +105,61 @@ export default function SenderDetails({ m, onFilterFingerprint }) {
       <div className="text-[11px] font-bold uppercase tracking-wide text-ink-muted mb-2">
         {t('admin.sd.title')}
       </div>
+
+      {/* Google account — profile photo + name + verified badge + history */}
+      {m.sender_google_sub && (
+        <div className="rounded-xl border border-brand-200 bg-brand-50/60 px-3 py-2.5 mb-2">
+          <div className="flex items-center gap-3">
+            {m.sender_picture ? (
+              <img
+                src={m.sender_picture}
+                alt=""
+                referrerPolicy="no-referrer"
+                className="w-10 h-10 rounded-full border border-white shadow-sm object-cover"
+              />
+            ) : (
+              <span className="text-2xl leading-none" aria-hidden>👤</span>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm font-bold text-ink truncate" dir="ltr">
+                  {m.sender_name || m.sender_email}
+                </span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5">
+                  ✓ {t('admin.sd.gVerified')}
+                </span>
+              </div>
+              {m.sender_email && (
+                <div className="text-xs text-ink-muted truncate" dir="ltr">{m.sender_email}</div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => onFilterGoogleSub?.(m.sender_google_sub, m.sender_email || m.sender_name || m.sender_google_sub)}
+              className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-brand-300 bg-white text-brand-700 hover:bg-brand-100 text-[11px] font-semibold px-2 py-1"
+            >
+              <span aria-hidden>🔍</span>
+              {t('admin.sd.filterGoogle')}
+            </button>
+          </div>
+          {acct && (
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-muted">
+              {typeof acct.total_messages === 'number' && (
+                <span>📨 {t('admin.sd.gMessages', { n: acct.total_messages })}</span>
+              )}
+              {typeof acct.total_recipients === 'number' && (
+                <span>👥 {t('admin.sd.gRecipients', { n: acct.total_recipients })}</span>
+              )}
+              {acct.first_seen && (
+                <span>🗓️ {t('admin.sd.gFirstSeen')}: {fmtDate(acct.first_seen, i18n.language)}</span>
+              )}
+              {acct.last_seen && (
+                <span>🕐 {t('admin.sd.gLastSeen')}: {fmtDate(acct.last_seen, i18n.language)}</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Device hero — big icon, device name, and a clear "phone vs computer" badge */}
       {ua && (
@@ -142,7 +207,7 @@ export default function SenderDetails({ m, onFilterFingerprint }) {
             <span dir="ltr">{m.net.isp || m.net.org}</span>
           </Fact>
         )}
-        {m.sender_email && (
+        {m.sender_email && !m.sender_google_sub && (
           <Fact icon="✉️" label={t('admin.sd.email')}>
             <span dir="ltr">{m.sender_email}</span>
           </Fact>

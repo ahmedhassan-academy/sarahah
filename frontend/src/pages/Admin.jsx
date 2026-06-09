@@ -153,14 +153,16 @@ function MessagesTab() {
   const { t, i18n } = useTranslation();
   const [q, setQ] = useState('');
   const [fingerprintFilter, setFingerprintFilter] = useState('');
+  const [googleFilter, setGoogleFilter] = useState(null); // { sub, label }
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const load = async (query = q, fp = fingerprintFilter) => {
+  const load = async (query = q, fp = fingerprintFilter, gf = googleFilter) => {
     setLoading(true);
     try {
       const params = { q: query, limit: 100 };
       if (fp) params.fingerprint = fp;
+      if (gf?.sub) params.google_sub = gf.sub;
       const { data } = await api.get('/admin/messages', { params });
       setMessages(data.messages);
     } finally {
@@ -169,10 +171,10 @@ function MessagesTab() {
   };
 
   useEffect(() => {
-    const id = setTimeout(() => load(q, fingerprintFilter), 250);
+    const id = setTimeout(() => load(q, fingerprintFilter, googleFilter), 250);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, fingerprintFilter]);
+  }, [q, fingerprintFilter, googleFilter]);
 
   const remove = async (id) => {
     if (!confirm(t('admin.confirmDeleteMsg'))) return;
@@ -229,6 +231,20 @@ function MessagesTab() {
           </button>
         </div>
       )}
+      {googleFilter && (
+        <div className="mb-4 flex items-center gap-2 text-xs bg-brand-50 border border-brand-200 rounded-lg px-3 py-2">
+          <span className="text-brand-800">
+            {t('admin.sd.filteringByGoogle')}{' '}
+            <b dir="ltr" className="font-semibold">{googleFilter.label}</b>
+          </span>
+          <button
+            onClick={() => setGoogleFilter(null)}
+            className="ms-auto text-brand-900 font-semibold hover:underline"
+          >
+            {t('admin.clearFilter', { defaultValue: 'Clear filter' })}
+          </button>
+        </div>
+      )}
       {loading ? (
         <div className="text-center text-ink-muted py-10">{t('common.loading')}</div>
       ) : messages.length === 0 ? (
@@ -256,7 +272,11 @@ function MessagesTab() {
                   </div>
                   <span>{formatDate(m.created_at, i18n.language)}</span>
                 </div>
-                <SenderDetails m={m} onFilterFingerprint={setFingerprintFilter} />
+                <SenderDetails
+                  m={m}
+                  onFilterFingerprint={setFingerprintFilter}
+                  onFilterGoogleSub={(sub, label) => setGoogleFilter({ sub, label })}
+                />
                 <p className="mt-2 text-ink whitespace-pre-wrap leading-relaxed">{m.body}</p>
                 <div className="mt-3 flex items-center gap-2 flex-wrap">
                   <button onClick={() => hideToggle(m.id)} className="btn-outline text-xs">
