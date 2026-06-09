@@ -159,8 +159,9 @@ export default function SenderDetails({ m, onFilterFingerprint }) {
               <button
                 type="button"
                 onClick={() => onFilterFingerprint?.(fp)}
-                className="text-[10px] font-semibold text-ink-muted hover:text-ink underline-offset-2 hover:underline"
+                className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 text-[11px] font-semibold px-2 py-1"
               >
+                <span aria-hidden>🔍</span>
                 {t('admin.sd.filterDevice')}
               </button>
             </div>
