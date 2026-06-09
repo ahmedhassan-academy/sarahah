@@ -1,6 +1,6 @@
 const pool = require('./db');
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 async function ensureSchemaVersionTable() {
   await pool.query(`
@@ -153,6 +153,22 @@ async function applyAll() {
     CREATE INDEX IF NOT EXISTS idx_follows_follower_user
       ON follows (follower_user_id)
       WHERE follower_user_id IS NOT NULL
+  `);
+
+  // v8 — cached IP network info (ISP/company + Wi-Fi vs mobile-data), so the
+  // admin panel can show the sender's connection without re-querying an
+  // external service on every page load.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ip_net (
+      ip TEXT PRIMARY KEY,
+      status TEXT NOT NULL DEFAULT 'ok',
+      isp TEXT,
+      org TEXT,
+      is_mobile BOOLEAN,
+      is_proxy BOOLEAN,
+      is_hosting BOOLEAN,
+      looked_up_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
   `);
 }
 

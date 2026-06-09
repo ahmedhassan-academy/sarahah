@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { getNetForIps } = require('../utils/ipNet');
 
 async function getStats(_req, res) {
   try {
@@ -89,7 +90,16 @@ async function listMessages(req, res) {
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );
-    res.json({ messages: rows });
+
+    // Enrich each message with the sender IP's network info (company/ISP +
+    // Wi-Fi vs mobile-data), served from cache where possible.
+    const netMap = await getNetForIps(rows.map((m) => m.sender_ip));
+    const messages = rows.map((m) => ({
+      ...m,
+      net: m.sender_ip ? netMap.get(m.sender_ip) || null : null,
+    }));
+
+    res.json({ messages });
   } catch (err) {
     console.error('[admin/listMessages]', err);
     res.status(500).json({ error: 'server_error' });

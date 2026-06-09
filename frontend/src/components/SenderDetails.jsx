@@ -78,6 +78,18 @@ export default function SenderDetails({ m, onFilterFingerprint }) {
 
   const formFactor = ua ? t(`admin.sd.form.${ua.device.type}`) : null;
 
+  // Internet channel from the sender IP's network: a mobile-carrier IP means
+  // mobile data; a fixed/broadband IP means Wi-Fi or home/office internet.
+  const conn = (() => {
+    const net = m.net;
+    if (!net) return null;
+    if (net.status === 'private') return { icon: '🏠', label: t('admin.sd.connLocal') };
+    if (net.status !== 'ok') return null;
+    if (net.is_proxy) return { icon: '🛡️', label: t('admin.sd.connVpn'), accent: 'text-amber-700' };
+    if (net.is_mobile) return { icon: '📶', label: t('admin.sd.connMobile') };
+    return { icon: '🛜', label: t('admin.sd.connWifi') };
+  })();
+
   return (
     <div className="mt-3 rounded-2xl bg-slate-50 border border-slate-200 p-3">
       <div className="text-[11px] font-bold uppercase tracking-wide text-ink-muted mb-2">
@@ -118,6 +130,16 @@ export default function SenderDetails({ m, onFilterFingerprint }) {
               {ua.browser.name}
               {ua.browser.version ? ` ${ua.browser.version}` : ''}
             </span>
+          </Fact>
+        )}
+        {conn && (
+          <Fact icon={conn.icon} label={t('admin.sd.connection')} accent={conn.accent}>
+            {conn.label}
+          </Fact>
+        )}
+        {m.net?.status === 'ok' && (m.net.isp || m.net.org) && (
+          <Fact icon="🏢" label={t('admin.sd.company')}>
+            <span dir="ltr">{m.net.isp || m.net.org}</span>
           </Fact>
         )}
         {m.sender_email && (
