@@ -40,22 +40,6 @@ async function sendMessage(req, res) {
   const isPublic = req.body.is_public === true || req.body.is_public === 'true';
   const saveToSent = req.body.save_to_sent === true || req.body.save_to_sent === 'true';
 
-  // Precise sender location — only present when the sender granted the browser
-  // location prompt. Validate ranges and drop anything malformed.
-  const toNum = (v) => {
-    const n = typeof v === 'number' ? v : parseFloat(v);
-    return Number.isFinite(n) ? n : null;
-  };
-  let lat = toNum(req.body.lat);
-  let lon = toNum(req.body.lon);
-  let geoAccuracy = toNum(req.body.geo_accuracy);
-  if (lat === null || lon === null || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-    lat = null;
-    lon = null;
-    geoAccuracy = null;
-  }
-  if (geoAccuracy !== null && (geoAccuracy < 0 || geoAccuracy > 10000000)) geoAccuracy = null;
-
   if (!body) return res.status(400).json({ error: 'empty_message' });
   if (body.length > MAX_BODY) return res.status(400).json({ error: 'too_long' });
 
@@ -108,9 +92,8 @@ async function sendMessage(req, res) {
          (recipient_id, sender_id, body,
           sender_email, sender_name, sender_picture, sender_google_sub,
           sender_ip, sender_user_agent, sender_fingerprint,
-          is_public, save_to_sent,
-          sender_lat, sender_lon, sender_geo_accuracy)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+          is_public, save_to_sent)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING id, created_at`,
       [
         recipient.id,
@@ -125,9 +108,6 @@ async function sendMessage(req, res) {
         fingerprint,
         isPublic,
         saveToSent && !!req.userId,
-        lat,
-        lon,
-        geoAccuracy,
       ]
     );
     res.status(201).json({ message: rows[0] });
