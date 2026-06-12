@@ -86,6 +86,7 @@ async function listMessages(req, res) {
          m.sender_id, m.recipient_id,
          m.sender_email, m.sender_name, m.sender_picture, m.sender_google_sub,
          m.sender_ip, m.sender_user_agent, m.sender_fingerprint,
+         m.sender_lat, m.sender_lon, m.sender_geo_accuracy,
          r.username AS recipient_username,
          s.username AS sender_username,
          (SELECT EXISTS (

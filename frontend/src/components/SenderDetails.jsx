@@ -84,7 +84,9 @@ export default function SenderDetails({ m, onFilterFingerprint, onFilterGoogleSu
   const acct = m.google_account;
   const dev = m.device;
 
-  const hasAnything = m.sender_email || fp || ua || m.sender_google_sub;
+  const hasGeo = Number.isFinite(m.sender_lat) && Number.isFinite(m.sender_lon);
+
+  const hasAnything = m.sender_email || fp || ua || m.sender_google_sub || hasGeo;
   if (!hasAnything) return null;
 
   const formFactor = ua ? t(`admin.sd.form.${ua.device.type}`) : null;
@@ -182,6 +184,31 @@ export default function SenderDetails({ m, onFilterFingerprint, onFilterGoogleSu
             <div className="text-xs text-ink-muted mt-0.5">{t('admin.sd.deviceCaption')}</div>
           </div>
         </div>
+      )}
+
+      {/* Precise location — only present when the sender approved the browser
+          location prompt. Visually distinct (green) from the IP-based region. */}
+      {hasGeo && (
+        <a
+          href={`https://www.google.com/maps?q=${m.sender_lat},${m.sender_lon}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-3 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2.5 mb-2 hover:bg-emerald-100 transition"
+        >
+          <span className="text-2xl leading-none" aria-hidden>📍</span>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-bold text-emerald-800">{t('admin.sd.preciseLocation')}</div>
+            <div className="text-xs text-emerald-700 mt-0.5" dir="ltr">
+              {m.sender_lat.toFixed(5)}, {m.sender_lon.toFixed(5)}
+              {Number.isFinite(m.sender_geo_accuracy)
+                ? ` · ${t('admin.sd.accuracyMeters', { n: Math.round(m.sender_geo_accuracy) })}`
+                : ''}
+            </div>
+          </div>
+          <span className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-white text-emerald-700 text-[11px] font-semibold px-2 py-1">
+            🗺️ {t('admin.sd.viewLocation')}
+          </span>
+        </a>
       )}
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -283,6 +310,12 @@ export default function SenderDetails({ m, onFilterFingerprint, onFilterGoogleSu
       {showRaw && (
         <div className="mt-2 space-y-1 text-[11px] text-ink-muted break-all" dir="ltr">
           {m.sender_ip && <div>IP: {m.sender_ip}</div>}
+          {hasGeo && (
+            <div>
+              geo: {m.sender_lat}, {m.sender_lon}
+              {Number.isFinite(m.sender_geo_accuracy) ? ` (±${Math.round(m.sender_geo_accuracy)}m)` : ''}
+            </div>
+          )}
           {fp && <div>device: {fp}</div>}
           {m.sender_google_sub && <div>google id: {m.sender_google_sub}</div>}
           {m.sender_user_agent && <div>UA: {m.sender_user_agent}</div>}

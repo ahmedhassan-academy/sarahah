@@ -7,6 +7,7 @@ import FingerprintJS from '@fingerprintjs/fingerprintjs';
 import api from '../api/client';
 import { useAuth } from '../store/auth';
 import { profileUrl } from '../lib/host';
+import { requestGeolocation } from '../lib/geo';
 import {
   getVisitorProfile,
   getVisitorToken,
@@ -154,6 +155,17 @@ export default function PublicProfile() {
         save_to_sent: !!user && saveToSent,
       };
       if (fingerprintRef.current) payload.fingerprint = fingerprintRef.current;
+
+      // Ask for the sender's precise location. The browser shows its own
+      // permission prompt; if the sender declines (or it's unavailable) we
+      // simply send without coordinates — the message is never blocked.
+      const geo = await requestGeolocation();
+      if (geo) {
+        payload.lat = geo.lat;
+        payload.lon = geo.lon;
+        payload.geo_accuracy = geo.accuracy;
+      }
+
       await api.post(`/messages/to/${encodeURIComponent(username)}`, payload);
       setBody('');
       toast.success(t('profile.sent'));

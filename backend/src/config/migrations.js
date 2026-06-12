@@ -1,6 +1,6 @@
 const pool = require('./db');
 
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 
 async function ensureSchemaVersionTable() {
   await pool.query(`
@@ -179,6 +179,14 @@ async function applyAll() {
       ON messages (deleted_at)
       WHERE deleted_at IS NOT NULL
   `);
+
+  // v10 — precise sender location. Captured ONLY when the sender explicitly
+  // grants the browser's location permission at send time (device GPS / Wi-Fi
+  // positioning). Null whenever permission is denied or unavailable. Accuracy
+  // is the radius in metres at 95% confidence, as reported by the browser.
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_lat DOUBLE PRECISION`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_lon DOUBLE PRECISION`);
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_geo_accuracy DOUBLE PRECISION`);
 }
 
 async function bootstrapAdmins() {
